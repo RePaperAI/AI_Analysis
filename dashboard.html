@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RePaper AI Dashboard</title>
+  <link rel="stylesheet" href="dashboard-controls.css" />
+  <link rel="stylesheet" href="ui-improvements.css" />
+
+  <style>
+    :root {
+      --green: #35b94a;
+      --green-dark: #1f8f34;
+      --green-soft: #eaf8ec;
+      --text: #1f2421;
+      --muted: #737a76;
+      --border: #e1e5e2;
+      --bg: #f4f6f4;
+      --card: #ffffff;
+      --sidebar: #151b19;
+      --yellow: #f4bd32;
+      --red: #ee6c61;
+      --blue: #4d88e8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* =========================
+       SIDEBAR
+    ========================== */
+
+    .sidebar {
+      width: 235px;
+      background: var(--sidebar);
+      color: white;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 10;
+    }
+
+    .brand-small {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 4px 10px 25px;
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: #174b26;
+      color: #62df73;
+      font-size: 21px;
+    }
+
+    .brand-small strong {
+      font-size: 19px;
+      letter-spacing: -0.4px;
+    }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .nav-item {
+      border: 0;
+      width: 100%;
+      background: transparent;
+      color: #b8c0bb;
+      text-align: left;
+      padding: 13px 14px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .nav-item:hover {
+      background: #222b27;
+      color: white;
+    }
+
+    .nav-item.active {
+      background: #2b8d3c;
+      color: white;
+    }
+
+    .nav-icon {
+      width: 22px;
+      text-align: center;
+      font-size: 17px;
+    }
+
+    .sidebar-bottom {
+      border-top: 1px solid #2a322f;
+      padding-top: 18px;
+    }
+
+    .sustainability-box {
+      border: 1px solid #354039;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .sustainability-box .earth {
+      font-size: 29px;
+      color: #68df79;
+      margin-bottom: 8px;
+    }
+
+    .sustainability-box h4 {
+      font-size: 12px;
+      color: #72e07d;
+      margin-bottom: 4px;
+      letter-spacing: 0.8px;
+    }
+
+    .sustainability-box p {
+      color: #acb5af;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #67dd76;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    /* =========================
+       MAIN AREA
+    ========================== */
+
+    .main {
+      margin-left: 235px;
+      width: calc(100% - 235px);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      height: 92px;
+      background: white;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 34px;
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      font-size: 39px;
+      line-height: 1;
+    }
+
+    .brand-title h1 {
+      font-size: 28px;
+      letter-spacing: -1px;
+    }
+
+    .brand-title p {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .status-pill {
+      margin-left: 55px;
+      border: 1px solid var(--border);
+      padding: 10px 17px;
+      border-radius: 11px;
+      min-width: 150px;
+      background: #fafcfb;
+    }
+
+    .status-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 3px;
+    }
+
+    .status-running {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--green-dark);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px #e9f7eb;
+    }
+
+    .school-info {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .time-box {
+      text-align: right;
+    }
+
+    .time-box strong {
+      font-size: 15px;
+    }
+
+    .time-box small {
+      display: block;
+      color: var(--muted);
+      margin-top: 2px;
+      font-size: 11px;
+    }
+
+    .school-selector {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    /* =========================
+       CONTENT
+    ========================== */
+
+    .content {
+      padding: 22px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1.05fr 0.92fr;
+      gap: 15px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 4px 16px rgba(18, 31, 23, 0.035);
+    }
+
+    .card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .card-title h2 {
+      font-size: 15px;
+      letter-spacing: 0.1px;
+    }
+
+    .info {
+      width: 20px;
+      height: 20px;
+      border: 1px solid #bfc6c1;
+      color: #79827c;
+      border-radius: 50%;
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+      cursor: help;
+    }
+
+    /* =========================
+       CURRENT SHEET
+    ========================== */
+
+    .analysis-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 0.8fr;
+      gap: 17px;
+    }
+
+    .paper {
+      background: #f7f7f4;
+      border: 1px solid #d8ddd9;
+      border-radius: 10px;
+      min-height: 390px;
+      padding: 19px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .paper-header {
+      display: flex;
+      justify-content: space-between;
+      color: #707570;
+      font-size: 9px;
+      margin-bottom: 13px;
+    }
+
+    .sheet-title {
+      text-align: center;
+      font-weight: 700;
+      font-size: 12px;
+      margin-bottom: 15px;
+    }
+
+    .question {
+      font-size: 10px;
+      line-height: 1.8;
+      margin-bottom: 7px;
+    }
+
+    .usable-region {
+      position: absolute;
+      background: rgba(105, 218, 113, 0.45);
+      border: 1px solid rgba(53, 185, 74, 0.45);
+      border-radius: 5px;
+      left: 15px;
+      right: 15px;
+      top: 75px;
+      height: 180px;
+    }
+
+    .unusable-region {
+      position: absolute;
+      right: 16px;
+      top: 255px;
+      width: 68px;
+      height: 52px;
+      background: rgba(248, 192, 53, 0.45);
+      border-radius: 5px;
+    }
+
+    .damaged-region {
+      position: absolute;
+      right: 15px;
+      bottom: 22px;
+      width: 88px;
+      height: 84px;
+      background: rgba(238, 108, 97, 0.48);
+      border-radius: 5px;
+    }
+
+    .sheet-line {
+      height: 5px;
+      background: #d7dbd7;
+      border-radius: 10px;
+      margin: 7px 0;
+      width: 62%;
+      position: relative;
+      z-index: 2;
+    }
+
+    .sheet-line.short {
+      width: 44%;
+    }
+
+    .sheet-line.long {
+      width: 78%;
+    }
+
+    .metric {
+      margin-bottom: 17px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 3px;
+    }
+
+    .big-number {
+      color: var(--green-dark);
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1;
+      margin: 6px 0 10px;
+    }
+
+    .progress {
+      background: #e5e8e5;
+      height: 8px;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .legend {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      margin-top: 9px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 3px;
+    }
+
+    .green {
+      background: #72dc78;
+    }
+
+    .yellow {
+      background: #f4c04e;
+    }
+
+    .red {
+      background: #ee786e;
+    }
+
+    .recommendation {
+      background: var(--green-soft);
+      border: 1px solid #cbeacb;
+      border-radius: 12px;
+      padding: 13px;
+      margin-top: 20px;
+    }
+
+    .recommendation-title {
+      color: var(--green-dark);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      margin-bottom: 7px;
+    }
+
+    .recommendation p {
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    /* =========================
+       CUTTING PLAN
+    ========================== */
+
+    .cutting-plan {
+      background: #f5f7f5;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .cut-sheet {
+      aspect-ratio: 1 / 1.35;
+      border: 2px solid #b8c0ba;
+      background: white;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      gap: 3px;
+      padding: 3px;
+    }
+
+    .cut-piece {
+      background: #95df9a;
+      border: 1px dashed #4eae58;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: #34763b;
+      font-size: 9px;
+      padding: 4px;
+    }
+
+    .cut-piece.medium {
+      background: #f5d56a;
+      border-color: #c7a82a;
+      color: #7b6700;
+    }
+
+    .cut-piece.recycle {
+      background: #f3aaa3;
+      border-color: #dd6b61;
+      color: #8f312a;
+      grid-column: span 2;
+    }
+
+    .cut-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .cut-summary div {
+      text-align: center;
+      padding: 8px 3px;
+      background: #fafbfa;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+    }
+
+    .cut-summary strong {
+      display: block;
+      font-size: 18px;
+    }
+
+    .cut-summary span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      margin-top: 3px;
+    }
+
+    /* =========================
+       STATISTICS
+    ========================== */
+
+    .stats-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #555e58;
+      font-size: 12px;
+    }
+
+    .stat-icon {
+      width: 27px;
+      height: 27px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #f0f3f0;
+    }
+
+    .stat-row strong {
+      font-size: 14px;
+    }
+
+    .reuse-box {
+      margin-top: 20px;
+      padding-top: 17px;
+      border-top: 1px solid var(--border);
+    }
+
+    .reuse-rate {
+      color: var(--green-dark);
+      font-weight: 800;
+      font-size: 39px;
+      margin-top: 6px;
+    }
+
+    .reuse-chart {
+      width: 87px;
+      height: 87px;
+      border-radius: 50%;
+      background: conic-gradient(var(--green) 0 54%, #dce0dd 54% 100%);
+      position: relative;
+      margin: 10px auto 14px;
+    }
+
+    .reuse-chart::after {
+      content: "";
+      position: absolute;
+      inset: 11px;
+      background: white;
+      border-radius: 50%;
+    }
+
+    .reuse-chart span {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+      font-size: 23px;
+    }
+
+    .trend {
+      font-size: 10px;
+      text-align: center;
+      color: var(--green-dark);
+    }
+
+    /* =========================
+       LOWER SECTION
+    ========================== */
+
+    .lower {
+      display: grid;
+      grid-template-columns: 1.7fr 0.95fr;
+      gap: 15px;
+      margin-top: 15px;
+    }
+
+    .process-flow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 5px;
+      padding: 12px 2px 17px;
+    }
+
+    .process-step {
+      text-align: center;
+      min-width: 70px;
+    }
+
+    .process-icon {
+      width: 43px;
+      height: 43px;
+      margin: auto;
+      border: 1px solid #cfd5d0;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      background: #fafcfa;
+      font-size: 20px;
+    }
+
+    .process-step strong {
+      display: block;
+      font-size: 9px;
+      margin-top: 7px;
+    }
+
+    .process-step small {
+      color: var(--green-dark);
+      font-size: 8px;
+      margin-top: 3px;
+      display: block;
+    }
+
+    .arrow {
+      color: #89938d;
+      font-size: 15px;
+    }
+
+    .current-progress {
+      margin-top: 5px;
+    }
+
+    .current-progress-header {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 10px;
+      margin-bottom: 6px;
+    }
+
+    /* =========================
+       DEMAND
+    ========================== */
+
+    .demand-list {
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+    }
+
+    .demand-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .demand-status {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .high {
+      color: var(--green-dark);
+    }
+
+    .medium {
+      color: #d27c16;
+    }
+
+    .low {
+      color: var(--blue);
+    }
+
+    .adjust-btn {
+      width: 100%;
+      border: 0;
+      background: var(--green-dark);
+      color: white;
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 17px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      transition: 0.2s;
+    }
+
+    .adjust-btn:hover {
+      background: #176c27;
+      transform: translateY(-1px);
+    }
+
+    .footer-bar {
+      margin-top: 15px;
+      padding: 10px 5px 0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--muted);
+    }
+
+    .footer-bar .green-text {
+      color: var(--green-dark);
+      font-weight: 700;
+    }
+
+    /* =========================
+       MODAL
+    ========================== */
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 25, 20, 0.42);
+      display: none;
+      place-items: center;
+      z-index: 100;
+    }
+
+    .modal {
+      background: white;
+      width: min(460px, calc(100vw - 30px));
+      border-radius: 17px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+
+    .modal h3 {
+      font-size: 19px;
+      margin-bottom: 7px;
+    }
+
+    .modal p {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 17px;
+    }
+
+    .demand-input {
+      margin-bottom: 13px;
+    }
+
+    .demand-input > label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .demand-input > input[type="range"] {
+      width: 100%;
+      accent-color: var(--green);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 19px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 9px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: white;
+    }
+
+    .modal-actions .save {
+      background: var(--green-dark);
+      color: white;
+      border-color: var(--green-dark);
+    }
+
+    /* =========================
+       RESPONSIVE
+    ========================== */
+
+    @media (max-width: 1250px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .grid .card:last-child {
+        grid-column: 1 / -1;
+      }
+
+      .lower {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 950px) {
+      .sidebar {
+        width: 75px;
+      }
+
+      .sidebar .brand-small strong,
+      .nav-item span:not(.nav-icon),
+      .sustainability-box,
+      .footer-brand span {
+        display: none;
+      }
+
+      .nav-item {
+        justify-content: center;
+      }
+
+      .main {
+        margin-left: 75px;
+        width: calc(100% - 75px);
+      }
+
+      .topbar {
+        padding: 0 20px;
+      }
+
+      .school-info {
+        gap: 12px;
+      }
+
+      .status-pill {
+        display: none;
+      }
+
+      .analysis-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .grid .card:last-child {
+        grid-column: auto;
+      }
+
+      .topbar {
+        height: auto;
+        padding: 17px;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .brand-title h1 {
+        font-size: 21px;
+      }
+
+      .school-info {
+        display: none;
+      }
+
+      .process-flow {
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding-bottom: 12px;
+      }
+    }
+
+    /* Reference dashboard treatment: calm paper surface, deep machine sidebar,
+       and compact data cards that stay legible on a tablet-sized viewport. */
+    body {
+      background: #e7ece9;
+      letter-spacing: .01em;
+    }
+
+    .app {
+      width: min(1500px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      background: #f8faf8;
+      box-shadow: 0 10px 34px rgba(15, 29, 21, .12);
+    }
+
+    .sidebar {
+      width: 235px;
+      padding: 28px 15px 22px;
+      background: linear-gradient(180deg, #17211f 0%, #10191b 100%);
+    }
+
+    .brand-small { padding: 4px 10px 39px; }
+    .brand-icon { background: transparent; font-size: 30px; }
+    .brand-icon .logo-mark { display: block; width: 38px; height: 38px; color: #4fc45a; }
+    .nav { gap: 9px; }
+    .nav-item { padding: 14px 14px; border-radius: 9px; font-size: 13px; }
+    .nav-item.active { background: #2c8e3c; box-shadow: inset 0 0 0 1px rgba(133, 232, 137, .14); }
+
+    .main { background: #f8faf8; }
+    .topbar { height: 105px; padding: 0 31px; }
+    .brand-logo { font-size: 42px; }
+    .brand-logo .logo-mark { display: block; width: 46px; height: 46px; color: #35b94a; }
+    .brand-title h1 { font-size: 30px; }
+    .brand-title p { font-size: 13px; }
+    .status-pill { margin-left: 42px; min-width: 140px; padding: 9px 15px; }
+
+    .content { padding: 16px 17px 13px; }
+    .grid { grid-template-columns: 1.55fr 1.08fr .94fr; gap: 13px; }
+    .card { border-radius: 15px; padding: 16px; box-shadow: 0 3px 12px rgba(18, 31, 23, .025); }
+    .card-title { margin-bottom: 11px; }
+    .card-title h2 { font-size: 14px; }
+    .analysis-layout { grid-template-columns: 1.35fr .75fr; gap: 14px; align-items: start; }
+    .analysis-layout > div:last-child { padding: 8px 4px 0; }
+    .analysis-layout .metric-label { text-align: center; color: #151a17; font-weight: 500; }
+    .analysis-layout .big-number { text-align: center; color: var(--green); font-size: 38px; margin: 7px 0 24px; }
+    .analysis-layout .progress { height: 10px; margin: 0 0 28px; }
+    .analysis-layout .legend { display: flex; flex-direction: column; justify-content: flex-start; gap: 18px; font-size: 13px; }
+    .analysis-layout .legend-item { display: grid; grid-template-columns: 18px 1fr auto; gap: 9px; align-items: center; }
+    .analysis-layout .legend-dot { width: 16px; height: 16px; border-radius: 3px; }
+    .analysis-layout .legend-item > span:last-child { font-weight: 700; color: #151a17; }
+    .paper { min-height: 0; height: auto; aspect-ratio: 987 / 1457; align-self: start; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .worksheet-image { position: relative; inset: auto; display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; z-index: 5; }
+    .worksheet-image.missing { display: none; }
+    .paper:has(.worksheet-image:not(.missing)) > :not(.worksheet-image) { display: none; }
+    .cutting-plan { padding: 8px; background: #f7f8f7; }
+    .cutting-plan { background: #fff; border: 0; border-radius: 0; overflow: visible; }
+    .cutting-plan-image { display: block; width: min(270px, 100%); max-width: 100%; max-height: none; height: auto; object-fit: contain; position: relative; z-index: 5; margin: 0 auto; border: 3px solid #111; }
+    .cutting-plan-image.missing { display: none; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) > .cut-sheet { display: none; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) { padding: 0; }
+    .cut-summary-label { color: #111; font-size: 14px; font-weight: 500; margin: 7px 0 5px; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary { margin-top: 3px; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary div { background: transparent; border: 0; border-right: 1px solid rgba(17,17,17,.14); border-radius: 0; padding: 2px 3px; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary div:last-child { border-right: 0; }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      background: #fff;
+      border-radius: 0 0 9px 9px;
+      padding: 7px 0 3px;
+    }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary div {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 46px;
+    }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary strong {
+      font-size: 32px;
+      line-height: .9;
+      font-weight: 500;
+    }
+    .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary span {
+      color: #202522;
+      font-size: 10px;
+      line-height: 1.15;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .cut-sheet { border: 0; background: #f64251; }
+    .cut-piece { background: #5acb57; border: 1px solid #277c32; color: #155d22; }
+    .cut-piece.medium { background: #f3c43e; border-color: #b18200; color: #6e5300; }
+    .cut-piece.recycle { background: #62a0cf; border-color: #286e9d; color: #103e61; }
+    .stats-list { gap: 12px; }
+    .stat-left { font-size: 12px; }
+    .demand-list { gap: 16px; }
+    .demand-row { display: grid; grid-template-columns: 1fr 126px 34px; gap: 10px; align-items: center; font-size: 12px; }
+    .demand-row { grid-template-columns: 1fr 126px 34px; gap: 10px; }
+    .demand-row input[type="range"] { width: 100%; height: 7px; margin: 0; accent-color: var(--green); cursor: pointer; }
+    .demand-row output { color: var(--green-dark); font-size: 11px; font-weight: 700; text-align: right; }
+    .demand-summary { margin: 20px 0 0; font-size: 12px; line-height: 1.35; }
+    .demand-summary-line { display: inline-block; max-width: 100%; }
+    .demand-summary-product { color: #3e4bd0; }
+    .demand-summary-product.primary { color: #1eaa45; }
+    .demand-summary-product.demand-sticky { color: #1eaa45; }
+    .demand-summary-product.demand-scratch { color: #3e4bd0; }
+    .demand-summary-product.demand-memo { color: #d49a00; }
+    .demand-summary-product.demand-flashcards { color: #8c4cc2; }
+    .demand-summary b { color: #1eaa45; }
+    .demand-card .adjust-btn { display: none; }
+    .lower { gap: 13px; margin-top: 13px; grid-template-columns: 1.75fr .95fr; }
+    .process-flow { padding: 10px 0 15px; }
+    .process-icon { border: 0; background: transparent; font-size: 25px; }
+    .footer-bar { margin-top: 11px; }
+    .footer-brand .logo-mark { display: block; width: 22px; height: 22px; color: #67dd76; }
+
+    @media (max-width: 1250px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+      .grid .card:last-child { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 700px) {
+      .app { box-shadow: none; }
+      .content { padding: 12px; }
+      .topbar { height: auto; }
+      .analysis-layout { grid-template-columns: 1fr; }
+      .paper { min-height: 0; }
+    }
+
+    /* Desktop proportions from the supplied dashboard reference. */
+    @media (min-width: 1251px) {
+      .app { width: 100%; max-width: none; box-shadow: none; }
+      .sidebar { width: 182px; top: 90px; bottom: 0; height: calc(100vh - 90px); }
+      .main { margin-left: 182px; width: calc(100% - 182px); padding-top: 90px; }
+      .topbar { position: fixed; inset: 0 0 auto 0; z-index: 9; height: 90px; padding: 0 31px; }
+      .grid { grid-template-rows: 482px; }
+      .lower { height: 257px; grid-template-columns: 1.6fr 1fr; }
+    }
+
+    /* Match the reference dashboard's clean, compact UI typography. */
+    .app,
+    .app button,
+    .app input,
+    .app output {
+      font-family: Arial, Helvetica, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .app h1,
+    .app h2,
+    .app h3,
+    .app strong,
+    .app b {
+      font-weight: 700;
+    }
+
+    .settings-slider-row { display: grid; grid-template-columns: minmax(0, 1fr) 122px; gap: 12px; align-items: center; }
+    .settings-slider-row > input[type="range"] { width: 100%; accent-color: var(--green); }
+    .settings-switch { display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; min-width: 0; margin: 0; color: #4c5952; font-size: 10px; white-space: nowrap; cursor: pointer; }
+    .settings-switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .settings-switch i { position: relative; display: block; width: 31px; height: 17px; border-radius: 999px; background: #cbd2ce; transition: background .2s ease; }
+    .settings-switch i::after { content: ""; position: absolute; width: 13px; height: 13px; top: 2px; left: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .2s ease; }
+    .settings-switch input:checked + i { background: var(--green); }
+    .settings-switch input:checked + i::after { transform: translateX(14px); }
+    .settings-switch input:focus-visible + i { outline: 3px solid rgba(53,185,74,.22); outline-offset: 3px; }
+
+    #dashboardHome,
+    #currentSheetCard,
+    #cuttingPlanCard,
+    #statisticsCard,
+    #processCard,
+    #schoolDemandCard { scroll-margin-top: 102px; }
+
+    .card { transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+    .card:hover { border-color: #c1d8c5; box-shadow: 0 10px 24px rgba(39, 104, 49, .08); }
+    .process-step { transition: transform .2s ease, color .2s ease; cursor: pointer; }
+    .process-step:hover { transform: translateY(-4px); color: var(--green-dark); }
+    .demand-row input[type="range"]:focus { outline: 3px solid rgba(53, 185, 74, .2); outline-offset: 4px; }
+
+    @keyframes sectionPulse {
+      0% { outline: 0 solid rgba(53, 185, 74, 0); outline-offset: 0; box-shadow: 0 0 0 rgba(53, 185, 74, 0); }
+      18% { outline: 3px solid rgba(53, 185, 74, .9); outline-offset: 6px; box-shadow: 0 0 0 5px rgba(53, 185, 74, .12); }
+      68% { outline: 3px solid rgba(53, 185, 74, .55); outline-offset: 6px; box-shadow: 0 0 0 5px rgba(53, 185, 74, .08); }
+      100% { outline: 0 solid rgba(53, 185, 74, 0); outline-offset: 0; box-shadow: 0 0 0 rgba(53, 185, 74, 0); }
+    }
+
+    .section-pulse { animation: sectionPulse 1.25s ease-out both; }
+
+    .sidebar-bottom { border-top: 0; padding-top: 0; }
+    .sustainability-box { border: 0; padding: 0; margin: 0; text-align: center; }
+    .sustainability-box .earth { width: 78px; height: 78px; margin: 0 auto 13px; color: #69df75; }
+    .sustainability-box .earth svg { display: block; width: 100%; height: 100%; }
+    .sustainability-box h4 { margin-bottom: 7px; color: #69df75; font-size: 13px; letter-spacing: .4px; }
+    .sustainability-box p { color: #69df75; font-size: 10px; line-height: 1.2; white-space: nowrap; }
+
+    @media (min-width: 1251px) {
+      .analysis-layout { grid-template-columns: 280px minmax(0, 1fr); }
+      .paper { width: 280px; height: 416px; aspect-ratio: auto; }
+      .worksheet-image { width: 100%; height: 100%; }
+      .cutting-plan-image { width: min(270px, 100%); max-width: 100%; max-height: none; }
+      .card-title h2 { font-size: 15px; }
+      .metric-label { font-size: 12px; }
+      .legend { font-size: 11px; }
+      .stat-left { font-size: 13px; }
+      .stat-row strong { font-size: 15px; }
+      .cut-summary strong { font-size: 20px; }
+      .cut-summary span { font-size: 10px; }
+      .cut-summary-label { font-size: 14px; }
+      .demand-row { font-size: 13px; }
+      .demand-row output { font-size: 12px; }
+      .process-step strong { font-size: 10px; }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- =========================
+       SIDEBAR
+  ========================== -->
+  <aside class="sidebar">
+
+    <div>
+      <nav class="nav">
+
+        <button class="nav-item active" type="button" data-target="dashboardHome">
+          <span class="nav-icon">⌂</span>
+          <span>Dashboard</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="currentSheetCard">
+          <span class="nav-icon">▤</span>
+          <span>Current Sheet</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="statisticsCard">
+          <span class="nav-icon">↗</span>
+          <span>Analytics</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="cuttingPlanCard">
+          <span class="nav-icon">▣</span>
+          <span>Products</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="schoolDemandCard">
+          <span class="nav-icon">♧</span>
+          <span>School Demand</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="processCard">
+          <span class="nav-icon">☷</span>
+          <span>Machine Status</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="dashboardHome">
+          <span class="nav-icon">◴</span>
+          <span>History</span>
+        </button>
+
+        <button class="nav-item" type="button" data-target="modal">
+          <span class="nav-icon">⚙</span>
+          <span>Settings</span>
+        </button>
+
+      </nav>
+    </div>
+
+    <div class="sidebar-bottom">
+
+      <div class="sustainability-box">
+        <div class="earth" aria-label="Sustainable recycling icon">
+          <svg viewBox="0 0 88 88" role="img" aria-hidden="true">
+            <circle cx="39" cy="42" r="27" fill="none" stroke="currentColor" stroke-width="3"/>
+            <path d="M14 37c8 4 16 5 23 3 7-2 10-8 10-14M18 55c8-2 14-7 16-14M49 16c-2 8 1 15 8 20 6 4 10 10 8 18M40 69c-2-8-8-12-15-16M57 27c-7 4-10 10-8 16 2 6 8 9 15 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <path d="M57 67c8-1 16-6 20-14 1 9-4 17-12 20-5 2-10 1-14-1Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h4>SUSTAINABLE</h4>
+        <p>REUSE &bull; REDUCE &bull; RECYCLE</p>
+      </div>
+
+    </div>
+  </aside>
+
+
+  <!-- =========================
+       MAIN
+  ========================== -->
+
+  <main class="main">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+
+      <div class="brand-title">
+        <div class="brand-logo" aria-label="RePaper AI leaf logo">
+          <svg class="logo-mark" viewBox="0 0 52 52" role="img" aria-hidden="true">
+            <path d="M26 45V23M26 31C17 31 10 25 10 16c9 0 16 6 16 15ZM26 25C26 14 34 7 44 7c0 11-7 18-18 18Z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M26 45c-7-1-12-5-15-11M26 45c7-1 12-5 15-11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <div>
+          <h1>RePaper AI</h1>
+          <p>Giving every sheet a second life</p>
+        </div>
+      </div>
+
+      <div class="status-pill">
+
+        <div class="status-label">
+          System Status
+        </div>
+
+        <div class="status-running">
+          <span class="status-dot"></span>
+          RUNNING
+        </div>
+
+      </div>
+
+      <div class="school-info">
+
+        <div class="time-box">
+          <strong id="clock">10:24 AM</strong>
+          <small id="date">21 May 2025</small>
+        </div>
+
+        <div class="school-selector">
+          🏫
+          RePaperAI Secondary School
+          <span>⌄</span>
+        </div>
+
+      </div>
+
+    </header>
+
+
+    <!-- CONTENT -->
+    <section class="content">
+
+      <div class="grid" id="dashboardHome">
+
+        <!-- =====================
+             CURRENT SHEET ANALYSIS
+        ====================== -->
+
+        <section class="card" id="currentSheetCard">
+
+          <div class="card-title">
+            <h2>CURRENT SHEET ANALYSIS</h2>
+            <span class="info">i</span>
+          </div>
+
+          <div class="analysis-layout">
+
+            <div class="paper">
+
+              <img class="worksheet-image" src="Assets/Sample_Worksheetpng.png" alt="Order of Operations worksheet" onerror="this.classList.add('missing')" />
+
+              <div class="paper-header">
+                <span>Name: __________</span>
+                <span>Date: __________</span>
+              </div>
+
+              <div class="sheet-title">
+                Mathematics Worksheet
+              </div>
+
+              <div class="usable-region"></div>
+              <div class="unusable-region"></div>
+              <div class="damaged-region"></div>
+
+              <div class="question">
+                1. Calculate:
+              </div>
+
+              <div class="sheet-line long"></div>
+              <div class="sheet-line"></div>
+              <div class="sheet-line short"></div>
+
+              <div class="question">
+                2. Solve:
+              </div>
+
+              <div class="sheet-line long"></div>
+              <div class="sheet-line"></div>
+
+              <div class="question">
+                3. Word Problem:
+              </div>
+
+              <div class="sheet-line long"></div>
+              <div class="sheet-line"></div>
+              <div class="sheet-line short"></div>
+
+            </div>
+
+
+            <div>
+
+              <div class="metric">
+
+                <div class="metric-label">
+                  USABLE AREA
+                </div>
+
+                <div class="big-number" id="blankStat">
+                  65%
+                </div>
+
+                <div class="progress">
+                  <span id="meterFill" style="width:65%"></span>
+                </div>
+
+              </div>
+
+              <div class="legend">
+
+                <div class="legend-item">
+                  <span class="legend-dot green"></span>
+                  <span class="legend-label">Usable Area</span><span id="usableLegend">65%</span>
+                </div>
+
+                <div class="legend-item">
+                  <span class="legend-dot yellow"></span>
+                  <span class="legend-label">Unusable Area</span><span id="printedStat">35%</span>
+                </div>
+
+                <div class="legend-item">
+                  <span class="legend-dot red"></span>
+                  <span class="legend-label">Damaged Area</span><span id="damageStat">0%</span>
+                </div>
+
+              </div>
+
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- =====================
+             CUTTING PLAN
+        ====================== -->
+
+        <section class="card" id="cuttingPlanCard">
+
+          <div class="card-title">
+            <h2>CUTTING PLAN PREVIEW</h2>
+            <span class="info">i</span>
+          </div>
+
+          <div class="cutting-plan">
+
+            <img class="cutting-plan-image" src="Assets/Sample_Worksheetpng_Recycle.png" alt="Worksheet reuse and recycling cutting plan" onerror="this.classList.add('missing')" />
+
+            <div class="cut-sheet">
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece">
+                76 × 76 mm
+              </div>
+
+              <div class="cut-piece medium">
+                76 × 50 mm
+              </div>
+
+              <div class="cut-piece medium">
+                76 × 50 mm
+              </div>
+
+              <div class="cut-piece medium">
+                76 × 100 mm
+              </div>
+
+              <div class="cut-piece recycle">
+                Recycle Area
+              </div>
+
+            </div>
+
+            <div class="cut-summary-label">Pieces to be produced</div>
+
+            <div class="cut-summary">
+
+              <div>
+                    <strong style="color:#35b94a;">5</strong>
+                <span>Sticky Notes</span>
+              </div>
+
+              <div>
+                <strong style="color:#d29d00;">2</strong>
+                <span>Memo Sheets</span>
+              </div>
+
+              <div>
+                <strong style="color:#3478d4;">1</strong>
+                <span>Scratch Sheet</span>
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- =====================
+             OVERALL STATISTICS
+        ====================== -->
+
+        <section class="card" id="statisticsCard">
+
+          <div class="card-title">
+            <h2>OVERALL STATISTICS</h2>
+            <span class="info">i</span>
+          </div>
+
+          <div class="stats-list">
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">▤</span>
+                Sheets Processed
+              </div>
+              <strong id="processed">1,250</strong>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">♻</span>
+                Sheets Reused
+              </div>
+              <strong>820</strong>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">▣</span>
+                Sticky Notes Created
+              </div>
+              <strong>2,400</strong>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">□</span>
+                Scratch Sheets Created
+              </div>
+              <strong>540</strong>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">▤</span>
+                Memo Sheets Created
+              </div>
+              <strong>380</strong>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat-left">
+                <span class="stat-icon">♻</span>
+                Paper Recycled
+              </div>
+              <strong>430</strong>
+            </div>
+
+          </div>
+
+
+          <div class="reuse-box">
+
+            <div class="metric-label">
+              REUSE RATE
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+
+              <div class="reuse-rate">
+                54%
+              </div>
+
+              <div class="reuse-chart">
+                <span>🌿</span>
+              </div>
+
+            </div>
+
+            <div class="trend">
+              ▲ 8.4% vs last week
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      <!-- =====================
+           LOWER CONTENT
+      ====================== -->
+
+      <div class="lower">
+
+        <!-- PROCESS FLOW -->
+
+        <section class="card" id="processCard">
+
+          <div class="card-title">
+
+            <h2>LIVE PROCESS FLOW</h2>
+
+            <span class="info">i</span>
+
+          </div>
+
+
+          <div class="process-flow">
+
+            <div class="process-step">
+              <div class="process-icon">📄</div>
+              <strong>Paper Input</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">〰</div>
+              <strong>Straightening</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">◉</div>
+              <strong>Scanning</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">🧠</div>
+              <strong>AI Analysis</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">✂</div>
+              <strong>Cutting</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">⇅</div>
+              <strong>Sorting</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">🗒</div>
+              <strong>Finishing</strong>
+              <small>OK</small>
+            </div>
+
+            <span class="arrow">→</span>
+
+            <div class="process-step">
+              <div class="process-icon">♻</div>
+              <strong>Recycling</strong>
+              <small>OK</small>
+            </div>
+
+          </div>
+
+
+          <div class="current-progress">
+
+            <div class="current-progress-header">
+              <span>Current Sheet Progress</span>
+              <strong>82%</strong>
+            </div>
+
+            <div class="progress">
+              <span style="width:82%"></span>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- SCHOOL DEMAND -->
+
+        <section class="card demand-card" id="schoolDemandCard">
+
+          <div class="card-title">
+            <h2>SCHOOL DEMAND</h2>
+            <span class="info">i</span>
+          </div>
+
+
+          <div class="demand-list">
+
+            <div class="demand-row">
+              <span>Sticky Notes</span>
+              <input type="range" min="0" max="100" value="69" data-demand="sticky" aria-label="Sticky Notes demand" />
+              <output>69%</output>
+            </div>
+
+            <div class="demand-row">
+              <span>Scratch Sheets</span>
+              <input type="range" min="0" max="100" value="100" data-demand="scratch" aria-label="Scratch Sheets demand" />
+              <output>100%</output>
+            </div>
+
+            <div class="demand-row">
+              <span>Memo Sheets</span>
+              <input type="range" min="0" max="100" value="50" data-demand="memo" aria-label="Memo Sheets demand" />
+              <output>50%</output>
+            </div>
+
+            <div class="demand-row">
+              <span>Flashcards</span>
+              <input type="range" min="0" max="100" value="25" data-demand="flashcards" aria-label="Flashcards demand" />
+              <output>25%</output>
+            </div>
+
+          </div>
+
+          <p class="demand-summary"><span class="demand-summary-line"><span id="demandSummaryProducts"><strong class="demand-summary-product primary">Sticky Notes</strong></span> are in</span><br /><b id="demandSummaryLevel">High Demand</b></p>
+
+
+          <button class="adjust-btn" onclick="openModal()">
+            ⚙ Adjust Demand
+          </button>
+
+        </section>
+
+      </div>
+
+
+      <div class="footer-bar">
+
+        <span class="green-text">
+          🌿 RePaper AI — Turning today's waste into tomorrow's resources.
+        </span>
+
+        <span>
+          Machine ID: RP-AI-0017 &nbsp;&nbsp; v1.2.0
+        </span>
+
+      </div>
+
+    </section>
+
+  </main>
+
+</div>
+
+
+<!-- =========================
+     MODAL
+========================== -->
+
+<div class="modal-backdrop" id="modal">
+
+  <div class="modal">
+
+    <h3>Adjust School Demand</h3>
+
+    <p>
+      Move the sliders to tell RePaper AI what products the school needs most.
+    </p>
+
+    <div class="demand-input">
+      <label>
+        <span>Sticky Notes</span>
+        <strong id="stickyValue">90%</strong>
+      </label>
+      <div class="settings-slider-row">
+        <input type="range" min="0" max="100" value="90" data-demand="sticky" oninput="updateValue('stickyValue', this.value)" />
+        <label class="settings-switch" for="settingsBlankSticky"><span>Both sides blank</span><input id="settingsBlankSticky" type="checkbox" /><i aria-hidden="true"></i></label>
+      </div>
+    </div>
+
+    <div class="demand-input">
+      <label>
+        <span>Scratch Paper</span>
+        <strong id="scratchValue">85%</strong>
+      </label>
+      <div class="settings-slider-row">
+        <input type="range" min="0" max="100" value="85" data-demand="scratch" oninput="updateValue('scratchValue', this.value)" />
+        <label class="settings-switch" for="settingsBlankScratch"><span>Both sides blank</span><input id="settingsBlankScratch" type="checkbox" /><i aria-hidden="true"></i></label>
+      </div>
+    </div>
+
+    <div class="demand-input">
+      <label>
+        <span>Memo Sheets</span>
+        <strong id="memoValue">55%</strong>
+      </label>
+      <div class="settings-slider-row">
+        <input type="range" min="0" max="100" value="55" data-demand="memo" oninput="updateValue('memoValue', this.value)" />
+        <label class="settings-switch" for="settingsBlankMemo"><span>Both sides blank</span><input id="settingsBlankMemo" type="checkbox" /><i aria-hidden="true"></i></label>
+      </div>
+    </div>
+
+    <div class="demand-input">
+      <label>
+        <span>Flashcards</span>
+        <strong id="flashValue">25%</strong>
+      </label>
+      <div class="settings-slider-row">
+        <input type="range" min="0" max="100" value="25" data-demand="flashcards" oninput="updateValue('flashValue', this.value)" />
+        <label class="settings-switch" for="settingsBlankFlashcards"><span>Both sides blank</span><input id="settingsBlankFlashcards" type="checkbox" /><i aria-hidden="true"></i></label>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+
+      <button onclick="closeModal()">
+        Cancel
+      </button>
+
+      <button class="save" onclick="saveDemand()">
+        Save Changes
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+  /* =========================
+     CLOCK
+  ========================== */
+
+  function updateClock() {
+
+    const now = new Date();
+
+    const time = now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const date = now.toLocaleDateString([], {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    document.getElementById("clock").textContent = time;
+    document.getElementById("date").textContent = date;
+  }
+
+  updateClock();
+  setInterval(updateClock, 1000);
+
+
+  /* =========================
+     SIDEBAR
+  ========================== */
+
+  document.querySelectorAll(".nav-item").forEach(item => {
+
+    item.addEventListener("click", () => {
+
+      document.querySelectorAll(".nav-item")
+        .forEach(nav => nav.classList.remove("active"));
+
+      item.classList.add("active");
+
+      const targetId = item.dataset.target;
+      if (targetId === "modal") {
+        openModal();
+        return;
+      }
+      const target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        target.classList.remove("section-pulse");
+        void target.offsetWidth;
+        window.setTimeout(() => target.classList.add("section-pulse"), 220);
+        window.setTimeout(() => target.classList.remove("section-pulse"), 1550);
+      }
+
+    });
+
+  });
+
+
+  /* =========================
+     DEMAND MODAL
+  ========================== */
+
+  function openModal() {
+
+    document.getElementById("modal").style.display = "grid";
+
+  }
+
+  function closeModal() {
+
+    document.getElementById("modal").style.display = "none";
+
+  }
+
+  function updateValue(id, value) {
+
+    document.getElementById(id).textContent = value + "%";
+
+  }
+
+  function saveDemand() {
+
+    alert("School demand updated. RePaper AI will use the new demand profile for future cutting decisions.");
+
+    closeModal();
+
+  }
+
+  window.addEventListener("click", (event) => {
+
+    const modal = document.getElementById("modal");
+
+    if (event.target === modal) {
+      closeModal();
+    }
+
+  });
+
+</script>
+<script src="app.js"></script>
+
+</body>
+</html>

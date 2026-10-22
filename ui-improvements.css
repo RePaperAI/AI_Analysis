@@ -1,0 +1,37 @@
+/* UI improvements: focus outlines, CTA polish, and small-screen layout fixes */
+
+/* Accessible focus styles */
+:focus {
+  outline: 3px solid rgba(46,139,87,0.16);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* Interactive polish for primary controls */
+.profile-cta, .scan-trigger, .adjust-btn, .nav-item, .modal-actions button {
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+
+.profile-cta:hover, .scan-trigger:hover, .adjust-btn:hover, .nav-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.06);
+}
+
+/* Small adjustments to improve spacing on narrow viewports */
+@media (max-width: 950px) {
+  .topbar { padding: 12px 18px; }
+  .shell, .profile-page { padding-left: 18px; padding-right: 18px; }
+}
+
+/* Stack hero and collapse sidebar on very small screens */
+@media (max-width: 700px) {
+  .profile-hero { grid-template-columns: 1fr; gap: 30px; padding-bottom: 40px; }
+  .profile-orb { width: 220px; height: 220px; }
+
+  /* Make the dashboard sidebar a horizontal strip */
+  .sidebar { position: static !important; width: 100% !important; display: flex !important; flex-direction: row !important; padding: 8px 12px !important; gap: 8px !important; overflow-x: auto !important; }
+  .sidebar .brand-small strong, .sidebar .sustainability-box, .footer-brand span { display: none !important; }
+  .nav { display: flex !important; flex-direction: row !important; gap: 8px !important; }
+  .nav-item { min-width: 110px; justify-content: center !important; }
+  .main { margin-left: 0 !important; width: 100% !important; }
+}
