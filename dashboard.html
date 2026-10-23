@@ -1105,6 +1105,23 @@
     .settings-switch input:checked + i::after { transform: translateX(14px); }
     .settings-switch input:focus-visible + i { outline: 3px solid rgba(53,185,74,.22); outline-offset: 3px; }
 
+    .gemini-scan-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; align-items: center; margin: -2px 0 14px; padding: 10px; background: #f3faf4; border: 1px solid #d5ead7; border-radius: 10px; }
+    .gemini-scan-bar input[type="password"] { min-width: 0; border: 1px solid #cbd9ce; border-radius: 7px; padding: 8px 10px; font-size: 11px; background: #fff; }
+    .gemini-scan-bar input[type="file"] { max-width: 215px; font-size: 10px; }
+    .gemini-scan-bar button { border: 0; border-radius: 7px; padding: 8px 12px; background: var(--green-dark); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .gemini-scan-bar button:disabled { opacity: .55; cursor: wait; }
+    .gemini-scan-status { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+    .gemini-cut-plan { display: grid; gap: 7px; margin: 8px 0 10px; }
+    .gemini-cut-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 8px 9px; border-radius: 8px; background: #eaf8ec; border: 1px solid #cbeacb; color: #245f2d; font-size: 10px; }
+    .gemini-cut-item.recycle { background: #eef5fa; border-color: #c9ddec; color: #245271; }
+    .gemini-cut-item strong { font-size: 11px; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 700px) {
+      .gemini-scan-bar { grid-template-columns: 1fr; }
+      .gemini-scan-bar input[type="file"] { max-width: none; width: 100%; }
+    }
+
     #dashboardHome,
     #currentSheetCard,
     #cuttingPlanCard,
@@ -1297,11 +1314,18 @@
             <span class="info">i</span>
           </div>
 
+          <div class="gemini-scan-bar" aria-label="Gemini worksheet scanner">
+            <input id="geminiKey" type="password" placeholder="Paste Gemini API key for this demo" autocomplete="off" aria-label="Gemini API key" />
+            <input id="geminiFile" type="file" accept="image/*" aria-label="Upload worksheet image" />
+            <button id="geminiScanBtn" type="button">Analyze with Gemini</button>
+            <span id="geminiStatus" class="gemini-scan-status">Upload a worksheet image. The key is kept only in this browser session.</span>
+          </div>
+
           <div class="analysis-layout">
 
             <div class="paper">
 
-              <img class="worksheet-image" src="Assets/Sample_Worksheetpng.png" alt="Order of Operations worksheet" onerror="this.classList.add('missing')" />
+              <img id="preview" class="worksheet-image" src="Assets/Sample_Worksheetpng.png" alt="Order of Operations worksheet" onerror="this.classList.add('missing')" />
 
               <div class="paper-header">
                 <span>Name: __________</span>
@@ -1379,6 +1403,13 @@
 
               </div>
 
+              <div class="recommendation" aria-live="polite">
+                <div class="recommendation-title" id="decision">GEMINI CUTTING RECOMMENDATION</div>
+                <p id="recommendation">Upload a worksheet to generate a reuse or recycling plan.</p>
+                <p id="recommendationCopy"></p>
+                <p id="confidence" style="margin-top:6px;color:#737a76;font-size:10px;"></p>
+              </div>
+
 
             </div>
 
@@ -1400,7 +1431,8 @@
 
           <div class="cutting-plan">
 
-            <img class="cutting-plan-image" src="Assets/Sample_Worksheetpng_Recycle.png" alt="Worksheet reuse and recycling cutting plan" onerror="this.classList.add('missing')" />
+            <img id="staticCutPlan" class="cutting-plan-image" src="Assets/Sample_Worksheetpng_Recycle.png" alt="Worksheet reuse and recycling cutting plan" onerror="this.classList.add('missing')" />
+            <div id="geminiCutPlan" class="gemini-cut-plan hidden" aria-live="polite"></div>
 
             <div class="cut-sheet">
 
@@ -1451,17 +1483,17 @@
             <div class="cut-summary">
 
               <div>
-                    <strong style="color:#35b94a;">5</strong>
+                    <strong id="pieceCount" style="color:#35b94a;">5</strong>
                 <span>Sticky Notes</span>
               </div>
 
               <div>
-                <strong style="color:#d29d00;">2</strong>
+                    <strong id="recovered" style="color:#d29d00;">2</strong>
                 <span>Memo Sheets</span>
               </div>
 
               <div>
-                <strong style="color:#3478d4;">1</strong>
+                    <strong id="waste" style="color:#3478d4;">1</strong>
                 <span>Scratch Sheet</span>
               </div>
 
