@@ -82,6 +82,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
 def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -> tuple[str, list[dict], str]:
     """Pack rectangles only into connected, ink-free areas of the flattened sheet."""
     height, width = threshold.shape
+    gray = cv2.cvtColor(sheet, cv2.COLOR_BGR2GRAY)
     products = _load_products()
     # Expand ink by a safety margin so cut lines do not run through nearby text,
     # handwriting, borders, or illustrations.
@@ -164,15 +165,31 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         beam = expanded[:180]
     pieces = beam[0][1] if beam else []
 
-    annotated = sheet.copy()
+    # Recreate the reference treatment: solid coral paper with original
+    # worksheet marks preserved as darker coral instead of washed-out pink.
+    coral = np.array([91.0, 85.0, 242.0], dtype=np.float32)       # #F2555B BGR
+    dark_coral = np.array([49.0, 41.0, 156.0], dtype=np.float32)
+    darkness = 1.0 - (gray.astype(np.float32) / 255.0)
+    darkness = np.clip(darkness * 0.72, 0.0, 0.72)[..., None]
+    annotated = np.clip(coral * (1.0 - darkness) + dark_coral * darkness, 0, 255).astype(np.uint8)
     for piece in pieces:
         x, y, w, h = piece["x"], piece["y"], piece["width"], piece["height"]
         piece_color = products[piece["product"]][3]
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), piece_color, 5)
-        text = f"{piece['label']} {piece['size_in']}"
-        label_width = min(w, max(190, 15 * len(text)))
-        cv2.rectangle(annotated, (x, y), (x + label_width, y + 34), (255, 255, 255), -1)
-        cv2.putText(annotated, text, (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .55, piece_color, 2, cv2.LINE_AA)
+        annotated[y:y + h, x:x + w] = np.array(piece_color, dtype=np.uint8)
+        border = tuple(max(0, int(channel * .72)) for channel in piece_color)
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), border, 5)
+        title = piece["label"]
+        dimensions = piece["size_in"]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = max(0.45, min(1.25, min(w / max(1, len(title) * 24), h / 90)))
+        title_size = cv2.getTextSize(title, font, scale, 2)[0]
+        tx = x + max(5, (w - title_size[0]) // 2)
+        ty = y + max(title_size[1] + 8, (h + title_size[1]) // 2 - 10)
+        dim_scale = max(.4, scale * .65)
+        dim_size = cv2.getTextSize(dimensions, font, dim_scale, 1)[0]
+        cv2.putText(annotated, title, (tx, ty), font, scale, (10, 10, 10), 2, cv2.LINE_AA)
+        dx = x + max(5, (w - dim_size[0]) // 2)
+        cv2.putText(annotated, dimensions, (dx, ty + dim_size[1] + 8), font, dim_scale, (10, 10, 10), 1, cv2.LINE_AA)
     if not pieces:
         status = "No clean product-sized region found; recycle recommended"
     else:
