@@ -537,7 +537,7 @@
 
     .cut-summary {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       margin-top: 12px;
     }
@@ -988,12 +988,14 @@
     .analysis-layout .legend-dot { width: 16px; height: 16px; border-radius: 3px; }
     .analysis-layout .legend-item > span:last-child { font-weight: 700; color: #151a17; }
     .paper { min-height: 0; height: auto; aspect-ratio: 987 / 1457; align-self: start; padding: 0; border: 0; border-radius: 0; background: transparent; }
+    /* Change width/height here to resize the original worksheet in Current Sheet Analysis. */
     .worksheet-image { position: relative; inset: auto; display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; z-index: 5; }
     .worksheet-image.missing { display: none; }
     .paper:has(.worksheet-image:not(.missing)) > :not(.worksheet-image) { display: none; }
     .cutting-plan { padding: 8px; background: #f7f8f7; }
     .cutting-plan { background: #fff; border: 0; border-radius: 0; overflow: visible; }
-    .cutting-plan-image { display: block; width: min(270px, 100%); max-width: 100%; max-height: none; height: auto; object-fit: contain; position: relative; z-index: 5; margin: 0 auto; border: 3px solid #111; }
+    /* Change width and max-height here to resize the cutting-plan preview image. */
+    .cutting-plan-image { display: block; box-sizing: border-box; width: min(285px, 100%); max-width: 100%; max-height: 370px; height: auto; object-fit: contain; position: relative; z-index: 5; margin: 0; border: 0; }
     .cutting-plan-image.missing { display: none; }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) > .cut-sheet { display: none; }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) { padding: 0; }
@@ -1003,7 +1005,7 @@
     .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary div:last-child { border-right: 0; }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 0;
       background: #fff;
       border-radius: 0 0 9px 9px;
@@ -1011,22 +1013,28 @@
     }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary div {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      min-height: 46px;
+      gap: 3px;
+      min-width: 0;
+      min-height: 54px;
+      padding: 4px 1px;
     }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary strong {
-      font-size: 32px;
+      font-size: 27px;
       line-height: .9;
       font-weight: 500;
     }
     .cutting-plan:has(.cutting-plan-image:not(.missing)) .cut-summary span {
       color: #202522;
-      font-size: 10px;
+      font-size: 8px;
       line-height: 1.15;
       margin: 0;
-      white-space: nowrap;
+      max-width: 100%;
+      text-align: center;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .cut-sheet { border: 0; background: #f64251; }
     .cut-piece { background: #5acb57; border: 1px solid #277c32; color: #155d22; }
@@ -1074,7 +1082,7 @@
       .sidebar { width: 182px; top: 90px; bottom: 0; height: calc(100vh - 90px); }
       .main { margin-left: 182px; width: calc(100% - 182px); padding-top: 90px; }
       .topbar { position: fixed; inset: 0 0 auto 0; z-index: 9; height: 90px; padding: 0 31px; }
-      .grid { grid-template-rows: 482px; }
+      .grid { grid-template-rows: auto; }
       .lower { height: 257px; grid-template-columns: 1.6fr 1fr; }
     }
 
@@ -1104,23 +1112,6 @@
     .settings-switch input:checked + i { background: var(--green); }
     .settings-switch input:checked + i::after { transform: translateX(14px); }
     .settings-switch input:focus-visible + i { outline: 3px solid rgba(53,185,74,.22); outline-offset: 3px; }
-
-    .gemini-scan-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; align-items: center; margin: -2px 0 14px; padding: 10px; background: #f3faf4; border: 1px solid #d5ead7; border-radius: 10px; }
-    .gemini-scan-bar input[type="password"] { min-width: 0; border: 1px solid #cbd9ce; border-radius: 7px; padding: 8px 10px; font-size: 11px; background: #fff; }
-    .gemini-scan-bar input[type="file"] { max-width: 215px; font-size: 10px; }
-    .gemini-scan-bar button { border: 0; border-radius: 7px; padding: 8px 12px; background: var(--green-dark); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
-    .gemini-scan-bar button:disabled { opacity: .55; cursor: wait; }
-    .gemini-scan-status { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
-    .gemini-cut-plan { display: grid; gap: 7px; margin: 8px 0 10px; }
-    .gemini-cut-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 8px 9px; border-radius: 8px; background: #eaf8ec; border: 1px solid #cbeacb; color: #245f2d; font-size: 10px; }
-    .gemini-cut-item.recycle { background: #eef5fa; border-color: #c9ddec; color: #245271; }
-    .gemini-cut-item strong { font-size: 11px; }
-    .hidden { display: none !important; }
-
-    @media (max-width: 700px) {
-      .gemini-scan-bar { grid-template-columns: 1fr; }
-      .gemini-scan-bar input[type="file"] { max-width: none; width: 100%; }
-    }
 
     #dashboardHome,
     #currentSheetCard,
@@ -1154,8 +1145,9 @@
     @media (min-width: 1251px) {
       .analysis-layout { grid-template-columns: 280px minmax(0, 1fr); }
       .paper { width: 280px; height: 416px; aspect-ratio: auto; }
+      /* Desktop overrides: adjust these values if the images need different desktop sizes. */
       .worksheet-image { width: 100%; height: 100%; }
-      .cutting-plan-image { width: min(270px, 100%); max-width: 100%; max-height: none; }
+      .cutting-plan-image { width: min(285px, 100%); max-width: 100%; max-height: 370px; }
       .card-title h2 { font-size: 15px; }
       .metric-label { font-size: 12px; }
       .legend { font-size: 11px; }
@@ -1314,18 +1306,11 @@
             <span class="info">i</span>
           </div>
 
-          <div class="gemini-scan-bar" aria-label="Gemini worksheet scanner">
-            <input id="geminiKey" type="password" placeholder="Paste Gemini API key for this demo" autocomplete="off" aria-label="Gemini API key" />
-            <input id="geminiFile" type="file" accept="image/*" aria-label="Upload worksheet image" />
-            <button id="geminiScanBtn" type="button">Analyze with Gemini</button>
-            <span id="geminiStatus" class="gemini-scan-status">Upload a worksheet image. The key is kept only in this browser session.</span>
-          </div>
-
           <div class="analysis-layout">
 
             <div class="paper">
 
-              <img id="preview" class="worksheet-image" src="Assets/Sample_Worksheetpng.png" alt="Order of Operations worksheet" onerror="this.classList.add('missing')" />
+              <img class="worksheet-image" src="Assets/Sample_Worksheet.png" alt="Understanding Simple Fractions worksheet" onerror="this.classList.add('missing')" />
 
               <div class="paper-header">
                 <span>Name: __________</span>
@@ -1403,13 +1388,6 @@
 
               </div>
 
-              <div class="recommendation" aria-live="polite">
-                <div class="recommendation-title" id="decision">GEMINI CUTTING RECOMMENDATION</div>
-                <p id="recommendation">Upload a worksheet to generate a reuse or recycling plan.</p>
-                <p id="recommendationCopy"></p>
-                <p id="confidence" style="margin-top:6px;color:#737a76;font-size:10px;"></p>
-              </div>
-
 
             </div>
 
@@ -1431,8 +1409,7 @@
 
           <div class="cutting-plan">
 
-            <img id="staticCutPlan" class="cutting-plan-image" src="Assets/Sample_Worksheetpng_Recycle.png" alt="Worksheet reuse and recycling cutting plan" onerror="this.classList.add('missing')" />
-            <div id="geminiCutPlan" class="gemini-cut-plan hidden" aria-live="polite"></div>
+            <img class="cutting-plan-image" src="Assets/Sample_Worksheet_Recycle.png" alt="Worksheet reuse and recycling cutting plan" onerror="this.classList.add('missing')" />
 
             <div class="cut-sheet">
 
@@ -1483,18 +1460,23 @@
             <div class="cut-summary">
 
               <div>
-                    <strong id="pieceCount" style="color:#35b94a;">5</strong>
+                    <strong style="color:#35b94a;">5</strong>
                 <span>Sticky Notes</span>
               </div>
 
               <div>
-                    <strong id="recovered" style="color:#d29d00;">2</strong>
-                <span>Memo Sheets</span>
+                <strong style="color:#d29d00;">1</strong>
+                <span>Memo Sheet</span>
               </div>
 
               <div>
-                    <strong id="waste" style="color:#3478d4;">1</strong>
+                <strong style="color:#3478d4;">1</strong>
                 <span>Scratch Sheet</span>
+              </div>
+
+              <div>
+                <strong style="color:#8c4cc2;">1</strong>
+                <span>Flashcard</span>
               </div>
 
             </div>
