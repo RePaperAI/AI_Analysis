@@ -4,8 +4,8 @@ const setText = (id, value) => { const element = $(id); if (element) element.tex
 let hasScan = false;
 
 function recommend(blank) {
-  const sizes = { scratch: '4 x 6 in', memo: '3 x 5 in', flashcards: '3 x 5 in', sticky: '3 x 3 in' };
-  const labels = { scratch: 'scratch sheets', memo: 'memo sheets', flashcards: 'flashcards', sticky: 'sticky notes' };
+  const sizes = { scratch: '4 x 6 in', memo: '3 x 5 in', flashcards: '3 x 5 in', sticky: '3 x 3 in', mini_sticky: '1.5 x 2 in' };
+  const labels = { scratch: 'scratch sheets', memo: 'memo sheets', flashcards: 'flashcards', sticky: 'sticky notes', mini_sticky: 'mini sticky notes' };
   const inputs = [...document.querySelectorAll('.demand-card input[type=range][data-demand]')];
   const values = inputs.length ? inputs.map(input => ({ name: input.dataset.demand, value: Number(input.value), size: sizes[input.dataset.demand] })) : [{ name: 'sticky', value: 90, size: sizes.sticky }];
   const demand = values.sort((a, b) => b.value - a.value)[0];
@@ -21,9 +21,9 @@ function showResult(result) {
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
   const planImage = document.querySelector('.cutting-plan-image');
   if (planImage && result.plan_image) { planImage.src = result.plan_image; planImage.alt = result.plan_status || 'OpenCV-generated cutting plan'; planImage.classList.remove('missing'); }
-  const counts = { sticky: 0, memo: 0, scratch: 0, flashcards: 0 };
+  const counts = { sticky: 0, mini_sticky: 0, memo: 0, scratch: 0, flashcards: 0 };
   (result.pieces || []).forEach(piece => { if (Object.prototype.hasOwnProperty.call(counts, piece.product)) counts[piece.product] += 1; });
-  setText('countSticky', counts.sticky); setText('countMemo', counts.memo);
+  setText('countSticky', counts.sticky); setText('countMiniSticky', counts.mini_sticky); setText('countMemo', counts.memo);
   setText('countScratch', counts.scratch); setText('countFlashcards', counts.flashcards);
   recommend(result.blank);
 }
@@ -57,7 +57,7 @@ if (fileInput) fileInput.addEventListener('change', event => acceptFile(event.ta
 const dropzone = $('dropzone'); if (dropzone) { dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); }); dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging')); dropzone.addEventListener('drop', event => { event.preventDefault(); dropzone.classList.remove('dragging'); acceptFile(event.dataTransfer.files[0]); }); }
 const sampleBtn = $('sampleBtn'); if (sampleBtn) sampleBtn.addEventListener('click', async () => { const response = await fetch('Assets/Sample_Worksheet.png'); const blob = await response.blob(); acceptFile(new File([blob], 'sample.png', { type: 'image/png' })); });
 function updateDemandSummary() {
-  const labels = { sticky: 'Sticky Notes', scratch: 'Scratch Sheets', memo: 'Memo Sheets', flashcards: 'Flashcards' };
+  const labels = { sticky: 'Sticky Notes', mini_sticky: 'Mini Sticky Notes', scratch: 'Scratch Sheets', memo: 'Memo Sheets', flashcards: 'Flashcards' };
   const rows = [...document.querySelectorAll('.demand-card input[type=range][data-demand]')]
     .map(input => ({ name: input.dataset.demand, value: Number(input.value) }))
     .sort((a, b) => b.value - a.value);
@@ -84,7 +84,7 @@ function updateDemandSummary() {
   }
   setText('demandSummaryLevel', level);
 }
-const demandKeys = ['sticky', 'scratch', 'memo', 'flashcards'];
+const demandKeys = ['sticky', 'mini_sticky', 'scratch', 'memo', 'flashcards'];
 function dashboardDemandInput(key) { return document.querySelector(`.demand-card input[data-demand="${key}"]`); }
 function settingsDemandInput(key) { return document.querySelector(`#modal input[type="range"][data-demand="${key}"]`); }
 function syncSettingsFromDashboard() {
@@ -92,7 +92,7 @@ function syncSettingsFromDashboard() {
     const source = dashboardDemandInput(key); const target = settingsDemandInput(key);
     if (!source || !target) return;
     target.value = source.value;
-    const valueId = { sticky: 'stickyValue', scratch: 'scratchValue', memo: 'memoValue', flashcards: 'flashValue' }[key];
+    const valueId = { sticky: 'stickyValue', mini_sticky: 'miniStickyValue', scratch: 'scratchValue', memo: 'memoValue', flashcards: 'flashValue' }[key];
     setText(valueId, `${source.value}%`);
   });
 }

@@ -69,6 +69,7 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     products = {
         # Product dimensions are the user-provided inch sizes converted to mm.
         "sticky": ("Sticky Notes", 76.2, 76.2, (54, 190, 74)),
+        "mini_sticky": ("Mini Sticky Notes", 38.1, 50.8, (35, 160, 120)),
         "memo": ("Memo Sheets", 76.2, 127.0, (44, 157, 211)),
         "flashcards": ("Flashcards", 76.2, 127.0, (153, 76, 194)),
         "scratch": ("Scratch Sheets", 101.6, 152.4, (220, 157, 0)),
