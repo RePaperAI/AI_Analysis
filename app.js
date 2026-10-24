@@ -31,16 +31,25 @@ async function acceptFile(file) {
   const content = $('dropContent'); if (content) content.hidden = true;
   const analysis = $('analysis'); if (analysis) analysis.classList.remove('hidden'); setText('confidence', 'Analyzing with Python...');
   const body = new FormData(); body.append('image', file, file.name || 'scan.jpg'); body.append('demand', JSON.stringify(Object.fromEntries([...document.querySelectorAll('[data-demand]')].map(input => [input.dataset.demand, Number(input.value)]))));
+  const uploadButton = $('uploadButton');
+  if (uploadButton) uploadButton.disabled = true;
   try {
     const apiUrl = location.port === '5000' ? '/api/analyze' : 'http://127.0.0.1:5000/api/analyze';
     const response = await fetch(apiUrl, { method: 'POST', body }); const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || `Scanner returned ${response.status}`); showResult(result);
-  } catch (error) { setText('confidence', `Python scanner unavailable: ${error.message}`); } finally { URL.revokeObjectURL(source); }
+  } catch (error) {
+    setText('confidence', `Upload failed: ${error.message || 'Start scanner.py first'}`);
+  } finally {
+    if (uploadButton) uploadButton.disabled = false;
+    URL.revokeObjectURL(source);
+  }
 }
 
-const fileInput = $('fileInput'); if (fileInput) fileInput.addEventListener('change', event => acceptFile(event.target.files[0]));
+const fileInput = $('fileInput');
+const uploadButton = $('uploadButton');
+if (fileInput) fileInput.addEventListener('change', event => acceptFile(event.target.files[0]));
 const dropzone = $('dropzone'); if (dropzone) { dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); }); dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging')); dropzone.addEventListener('drop', event => { event.preventDefault(); dropzone.classList.remove('dragging'); acceptFile(event.dataTransfer.files[0]); }); }
-const sampleBtn = $('sampleBtn'); if (sampleBtn) sampleBtn.addEventListener('click', () => { const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="white"/><text x="55" y="90" font-family="Arial" font-size="22" fill="#555">SCIENCE WORKSHEET</text><path d="M55 135h460M55 175h360M55 215h410M55 255h300" stroke="#aab6b0" stroke-width="5"/></svg>`; acceptFile(new File([svg], 'sample.svg', { type: 'image/svg+xml' })); });
+const sampleBtn = $('sampleBtn'); if (sampleBtn) sampleBtn.addEventListener('click', async () => { const response = await fetch('Assets/Sample_Worksheet.png'); const blob = await response.blob(); acceptFile(new File([blob], 'sample.png', { type: 'image/png' })); });
 function updateDemandSummary() {
   const labels = { sticky: 'Sticky Notes', scratch: 'Scratch Sheets', memo: 'Memo Sheets', flashcards: 'Flashcards' };
   const rows = [...document.querySelectorAll('.demand-card input[type=range][data-demand]')]

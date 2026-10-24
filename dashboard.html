@@ -1306,11 +1306,18 @@
             <span class="info">i</span>
           </div>
 
+          <div class="scanner-controls">
+            <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+            <label class="scan-trigger" id="uploadButton" for="fileInput">Upload sheet image</label>
+            <button class="scan-trigger" id="sampleBtn" type="button">Try sample</button>
+            <span id="confidence" class="scan-status">No sheet scanned yet</span>
+          </div>
+
           <div class="analysis-layout">
 
             <div class="paper">
 
-              <img class="worksheet-image" src="Assets/Sample_Worksheet.png" alt="Understanding Simple Fractions worksheet" onerror="this.classList.add('missing')" />
+              <img id="preview" class="worksheet-image" src="Assets/Sample_Worksheet.png" alt="Uploaded worksheet preview" onerror="this.classList.add('missing')" />
 
               <div class="paper-header">
                 <span>Name: __________</span>
