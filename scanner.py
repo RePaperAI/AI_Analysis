@@ -78,11 +78,9 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     ink = (threshold > 0).astype(np.uint8)
     ink[[0, 1, -2, -1], :] = 1
     ink[:, [0, 1, -2, -1]] = 1
-    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
     blank = (ink == 0).astype(np.uint8)
     integral = cv2.integral(blank)
-    reserved = np.zeros_like(blank)
-    pieces = []
     # The detected border is already part of the ink mask, so keep only a small
     # outer search margin and preserve more usable paper near the edges.
     margin_x, margin_y = int(width * .02), int(height * .02)
@@ -91,59 +89,80 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         total = integral[y + h, x + w] - integral[y, x + w] - integral[y + h, x] + integral[y, x]
         return float(total) / max(1, w * h)
 
-    def place_product(product_key: str, quota: int) -> None:
-        label, mm_w, mm_h, color = products[product_key]
-        px_per_mm = min(width / 216.0, height / 279.0)
-        # Try both orientations so memo sheets and flashcards use space efficiently.
-        orientations = [(mm_w, mm_h), (mm_h, mm_w)]
-        for physical_w, physical_h in orientations:
-            if len(pieces) >= 12 or sum(1 for p in pieces if p["product"] == product_key) >= quota:
-                break
-            piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
-            # Scan all candidates and select the safest one. The slight position
-            # preference puts a valid piece farther right/lower when several options
-            # have identical blank coverage, keeping it away from common question text.
-            best = None
-            for y in range(margin_y, height - margin_y - piece_h + 1, 6):
-                for x in range(margin_x, width - margin_x - piece_w + 1, 6):
-                    if np.any(reserved[y:y + piece_h, x:x + piece_w]):
-                        continue
-                    ratio = blank_ratio(x, y, piece_w, piece_h)
-                    if ratio >= .995:
-                        # Sticky notes are packed top-down so a tall blank column
-                        # can produce multiple stacked notes. Larger cards still
-                        # prefer the lower-right open area.
-                        vertical_bias = -0.008 if product_key == "sticky" else 0.008
-                        score = ratio + 0.02 * (x / width) + vertical_bias * (y / height)
-                        if best is None or score > best[0]:
-                            best = (score, x, y)
-            if best is None:
-                continue
-            _, x, y = best
-            reserved[y:y + piece_h, x:x + piece_w] = 1
-            pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
-                           "label": label, "product": product_key,
-                           "size_mm": f"{physical_w} x {physical_h} mm"})
-
     demand_values = {key: max(0.0, float(demand.get(key, 0))) for key in products}
     if not any(demand_values.values()):
         demand_values["sticky"] = 1
-    max_demand = max(demand_values.values())
-    # High-demand items get up to three requested pieces; lower-demand items get
-    # fewer. Every non-zero demand category gets at least one attempt.
-    for product_key, value in sorted(demand_values.items(), key=lambda item: item[1], reverse=True):
-        if value <= 0:
+    # Generate safe candidate rectangles for every demanded product and both
+    # orientations. A candidate is accepted only when its complete interior is
+    # blank after the ink safety dilation.
+    candidates = []
+    for product_key, demand_value in demand_values.items():
+        if demand_value <= 0:
             continue
-        quota = min(3, max(1, int(np.ceil(3 * value / max_demand))))
-        place_product(product_key, quota)
+        label, mm_w, mm_h, _ = products[product_key]
+        px_per_mm = min(width / 216.0, height / 279.0)
+        orientations = {(mm_w, mm_h), (mm_h, mm_w)}
+        for physical_w, physical_h in orientations:
+            piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
+            for y in range(margin_y, height - margin_y - piece_h + 1, 6):
+                for x in range(margin_x, width - margin_x - piece_w + 1, 6):
+                    ratio = blank_ratio(x, y, piece_w, piece_h)
+                    if ratio >= .995:
+                        area = piece_w * piece_h
+                        # Demand is a preference, while area recovery is the main
+                        # objective. This lets smaller products fill leftover gaps.
+                        value = area * (0.45 + 0.55 * demand_value / 100.0)
+                        candidates.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
+                                           "label": label, "product": product_key,
+                                           "size_mm": f"{physical_w} x {physical_h} mm",
+                                           "size_in": f"{physical_w / 25.4:g} x {physical_h / 25.4:g} in",
+                                           "value": value})
+
+    # Keep spatially diverse candidates so optimization remains fast and does not
+    # overfit to hundreds of nearly identical origins in one blank region.
+    diverse = {}
+    for candidate in candidates:
+        key = (candidate["product"], candidate["x"] // 48, candidate["y"] // 48,
+               candidate["width"], candidate["height"])
+        if key not in diverse or candidate["value"] > diverse[key]["value"]:
+            diverse[key] = candidate
+    # Preserve a useful candidate set for every product; otherwise a large
+    # scratch/memo rectangle could crowd all smaller sticky-note candidates out
+    # before the optimizer gets a chance to combine them.
+    grouped = {}
+    for candidate in diverse.values():
+        grouped.setdefault(candidate["product"], []).append(candidate)
+    candidates = []
+    for group in grouped.values():
+        candidates.extend(sorted(group, key=lambda item: item["value"], reverse=True)[:250])
+    candidates = sorted(candidates, key=lambda item: item["value"], reverse=True)[:900]
+
+    def overlaps(a: dict, b: dict) -> bool:
+        return not (a["x"] + a["width"] <= b["x"] or b["x"] + b["width"] <= a["x"] or
+                    a["y"] + a["height"] <= b["y"] or b["y"] + b["height"] <= a["y"])
+
+    # Beam search chooses a globally better combination than greedy placement.
+    # Each state is (score, selected pieces); overlap-free states survive pruning.
+    beam = [(0.0, [])]
+    for candidate in candidates:
+        expanded = list(beam)
+        for score, selected in beam:
+            if len(selected) >= 20 or any(overlaps(candidate, piece) for piece in selected):
+                continue
+            expanded.append((score + candidate["value"], selected + [candidate]))
+        expanded.sort(key=lambda state: state[0], reverse=True)
+        beam = expanded[:180]
+    pieces = beam[0][1] if beam else []
 
     annotated = sheet.copy()
     for piece in pieces:
         x, y, w, h = piece["x"], piece["y"], piece["width"], piece["height"]
         piece_color = products[piece["product"]][3]
         cv2.rectangle(annotated, (x, y), (x + w, y + h), piece_color, 5)
-        cv2.rectangle(annotated, (x, y), (x + min(w, 190), y + 34), (255, 255, 255), -1)
-        cv2.putText(annotated, piece["label"], (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .7, piece_color, 2, cv2.LINE_AA)
+        text = f"{piece['label']} {piece['size_in']}"
+        label_width = min(w, max(190, 15 * len(text)))
+        cv2.rectangle(annotated, (x, y), (x + label_width, y + 34), (255, 255, 255), -1)
+        cv2.putText(annotated, text, (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .55, piece_color, 2, cv2.LINE_AA)
     if not pieces:
         status = "No clean product-sized region found; recycle recommended"
     else:
@@ -170,7 +189,7 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
                                       cv2.THRESH_BINARY_INV, 31, 14)
     # Combine adaptive thresholding with a fixed light-ink threshold so that
     # anti-aliased gray text and thin worksheet lines are not mistaken for blank paper.
-    _, light_ink = cv2.threshold(roi, 220, 255, cv2.THRESH_BINARY_INV)
+    _, light_ink = cv2.threshold(roi, 235, 255, cv2.THRESH_BINARY_INV)
     threshold = cv2.bitwise_or(threshold, light_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     ink_pixels = int(np.count_nonzero(threshold))
