@@ -78,12 +78,14 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     ink = (threshold > 0).astype(np.uint8)
     ink[[0, 1, -2, -1], :] = 1
     ink[:, [0, 1, -2, -1]] = 1
-    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)))
     blank = (ink == 0).astype(np.uint8)
     integral = cv2.integral(blank)
     reserved = np.zeros_like(blank)
     pieces = []
-    margin_x, margin_y = int(width * .05), int(height * .05)
+    # The detected border is already part of the ink mask, so keep only a small
+    # outer search margin and preserve more usable paper near the edges.
+    margin_x, margin_y = int(width * .02), int(height * .02)
 
     def blank_ratio(x: int, y: int, w: int, h: int) -> float:
         total = integral[y + h, x + w] - integral[y, x + w] - integral[y + h, x] + integral[y, x]
@@ -98,19 +100,26 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
             if len(pieces) >= 12 or sum(1 for p in pieces if p["product"] == product_key) >= quota:
                 break
             piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
-            # Scan candidate origins at a fine stride. A candidate must be effectively
-            # 100% blank; the dilation above supplies practical cutting clearance.
+            # Scan all candidates and select the safest one. The slight position
+            # preference puts a valid piece farther right/lower when several options
+            # have identical blank coverage, keeping it away from common question text.
+            best = None
             for y in range(margin_y, height - margin_y - piece_h + 1, 6):
                 for x in range(margin_x, width - margin_x - piece_w + 1, 6):
-                    if len(pieces) >= 12 or sum(1 for p in pieces if p["product"] == product_key) >= quota:
-                        break
                     if np.any(reserved[y:y + piece_h, x:x + piece_w]):
                         continue
-                    if blank_ratio(x, y, piece_w, piece_h) >= .995:
-                        reserved[y:y + piece_h, x:x + piece_w] = 1
-                        pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
-                                       "label": label, "product": product_key,
-                                       "size_mm": f"{physical_w} x {physical_h} mm"})
+                    ratio = blank_ratio(x, y, piece_w, piece_h)
+                    if ratio >= .995:
+                        score = ratio + 0.02 * (x / width) + 0.008 * (y / height)
+                        if best is None or score > best[0]:
+                            best = (score, x, y)
+            if best is None:
+                continue
+            _, x, y = best
+            reserved[y:y + piece_h, x:x + piece_w] = 1
+            pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
+                           "label": label, "product": product_key,
+                           "size_mm": f"{physical_w} x {physical_h} mm"})
 
     demand_values = {key: max(0.0, float(demand.get(key, 0))) for key in products}
     if not any(demand_values.values()):
@@ -155,6 +164,10 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     # Adaptive threshold handles shadows and uneven lighting better than a fixed threshold.
     threshold = cv2.adaptiveThreshold(roi, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                       cv2.THRESH_BINARY_INV, 31, 14)
+    # Combine adaptive thresholding with a fixed light-ink threshold so that
+    # anti-aliased gray text and thin worksheet lines are not mistaken for blank paper.
+    _, light_ink = cv2.threshold(roi, 220, 255, cv2.THRESH_BINARY_INV)
+    threshold = cv2.bitwise_or(threshold, light_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     ink_pixels = int(np.count_nonzero(threshold))
     total_pixels = threshold.size
