@@ -7,6 +7,7 @@ regions. It is a useful first pass, not an OCR or forensic paper-grading model.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 import cv2
@@ -62,7 +63,72 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
     return small, 48.0
 
 
-def analyze_sheet(image: np.ndarray) -> dict:
+def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -> tuple[str, list[dict], str]:
+    """Pack rectangles only into connected, ink-free areas of the flattened sheet."""
+    height, width = threshold.shape
+    products = {
+        "sticky": ("Sticky Notes", 76, 76, (54, 190, 74)),
+        "memo": ("Memo Sheets", 100, 150, (44, 157, 211)),
+        "flashcards": ("Flashcards", 76, 127, (153, 76, 194)),
+        "scratch": ("Scratch Sheets", 216, 279, (220, 157, 0)),
+    }
+    product_key = max(products, key=lambda key: float(demand.get(key, 0))) if demand else "sticky"
+    label, mm_w, mm_h, color = products[product_key]
+    px_per_mm = min(width / 216.0, height / 279.0)
+    piece_w, piece_h = max(32, int(mm_w * px_per_mm)), max(32, int(mm_h * px_per_mm))
+    # Expand ink by a safety margin so cut lines do not run through nearby text,
+    # handwriting, borders, or illustrations.
+    ink = (threshold > 0).astype(np.uint8)
+    ink[[0, 1, -2, -1], :] = 1
+    ink[:, [0, 1, -2, -1]] = 1
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+    blank = (ink == 0).astype(np.uint8)
+    integral = cv2.integral(blank)
+    reserved = np.zeros_like(blank)
+    pieces = []
+    margin_x, margin_y = int(width * .05), int(height * .05)
+
+    def blank_ratio(x: int, y: int, w: int, h: int) -> float:
+        total = integral[y + h, x + w] - integral[y, x + w] - integral[y + h, x] + integral[y, x]
+        return float(total) / max(1, w * h)
+
+    # Scan candidate origins at a fine stride. A candidate must be effectively
+    # 100% blank; the dilation above supplies the practical cutting clearance.
+    stride = 6
+    for y in range(margin_y, height - margin_y - piece_h + 1, stride):
+        for x in range(margin_x, width - margin_x - piece_w + 1, stride):
+            if len(pieces) >= 12 or np.any(reserved[y:y + piece_h, x:x + piece_w]):
+                continue
+            if blank_ratio(x, y, piece_w, piece_h) >= .995:
+                reserved[y:y + piece_h, x:x + piece_w] = 1
+                pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
+                               "label": label, "size_mm": f"{mm_w} x {mm_h} mm"})
+
+    # If the most-requested product is too large for the blank regions, try the
+    # next requested product instead of returning an unusable empty plan.
+    if not pieces and demand:
+        fallback = dict(demand)
+        fallback[product_key] = -1
+        if any(float(value) > 0 for value in fallback.values()):
+            return _make_cutting_plan(sheet, threshold, fallback)
+
+    annotated = sheet.copy()
+    for piece in pieces:
+        x, y, w, h = piece["x"], piece["y"], piece["width"], piece["height"]
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 5)
+        cv2.rectangle(annotated, (x, y), (x + min(w, 190), y + 34), (255, 255, 255), -1)
+        cv2.putText(annotated, label, (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .7, color, 2, cv2.LINE_AA)
+    if not pieces:
+        status = "No clean product-sized region found; recycle recommended"
+    else:
+        status = f"{len(pieces)} {label.lower()} planned; remaining marked content goes to recycling"
+    ok, encoded = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+    if not ok:
+        return "", pieces, status
+    return "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii"), pieces, status
+
+
+def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     sheet, detection_confidence = _flatten_sheet(image)
     gray = cv2.cvtColor(sheet, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape
@@ -97,6 +163,9 @@ def analyze_sheet(image: np.ndarray) -> dict:
     lighting = float(np.mean(roi))
     quality = 100 - min(45, abs(lighting - 190) / 4)
     confidence = round(max(50, min(99, detection_confidence * 0.65 + quality * 0.35)))
+    full_ink = np.zeros_like(gray, dtype=np.uint8)
+    full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = threshold
+    plan_image, pieces, plan_status = _make_cutting_plan(sheet, full_ink, demand or {})
     return {
         "blank": usable,
         "printed": printed,
@@ -105,6 +174,9 @@ def analyze_sheet(image: np.ndarray) -> dict:
         "type": "document detected" if detection_confidence > 60 else "best-effort scan",
         "width": int(width),
         "height": int(height),
+        "plan_image": plan_image,
+        "pieces": pieces,
+        "plan_status": plan_status,
     }
 
 
@@ -131,7 +203,11 @@ def analyze():
     if image is None:
         return jsonify(error="OpenCV could not read that image. Use JPG, PNG, or WebP."), 400
     try:
-        return jsonify(analyze_sheet(image))
+        try:
+            demand = json.loads(request.form.get("demand", "{}"))
+        except json.JSONDecodeError:
+            demand = {}
+        return jsonify(analyze_sheet(image, demand))
     except Exception as exc:
         app.logger.exception("Image analysis failed")
         return jsonify(error=f"Image analysis failed: {exc}"), 422

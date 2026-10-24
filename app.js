@@ -19,6 +19,10 @@ function recommend(blank) {
 function showResult(result) {
   hasScan = true; setText('blankStat', `${result.blank}%`); setText('printedStat', `${result.printed}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
+  const planImage = document.querySelector('.cutting-plan-image');
+  if (planImage && result.plan_image) { planImage.src = result.plan_image; planImage.alt = result.plan_status || 'OpenCV-generated cutting plan'; planImage.classList.remove('missing'); }
+  const planLabel = document.querySelector('.cut-summary-label');
+  if (planLabel && result.plan_status) planLabel.textContent = result.plan_status;
   recommend(result.blank);
 }
 
