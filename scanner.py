@@ -194,14 +194,16 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     margin_y, margin_x = int(height * 0.04), int(width * 0.04)
     roi = gray[margin_y:height - margin_y, margin_x:width - margin_x]
 
-    # Adaptive threshold handles shadows and uneven lighting better than a fixed threshold.
-    threshold = cv2.adaptiveThreshold(roi, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                      cv2.THRESH_BINARY_INV, 31, 14)
-    # Combine adaptive thresholding with a fixed light-ink threshold so that
-    # anti-aliased gray text and thin worksheet lines are not mistaken for blank paper.
-    _, light_ink = cv2.threshold(roi, 235, 255, cv2.THRESH_BINARY_INV)
-    threshold = cv2.bitwise_or(threshold, light_ink)
+    # Normalize uneven lighting before thresholding. This reduces false ink caused
+    # by camera shadows while preserving faint gray worksheet text.
+    background = cv2.GaussianBlur(roi, (0, 0), 21)
+    normalized = cv2.divide(roi, background, scale=255)
+    adaptive_ink = cv2.adaptiveThreshold(normalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                          cv2.THRESH_BINARY_INV, 35, 10)
+    _, raw_ink = cv2.threshold(roi, 225, 255, cv2.THRESH_BINARY_INV)
+    threshold = cv2.bitwise_or(adaptive_ink, raw_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+    threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
     ink_pixels = int(np.count_nonzero(threshold))
     total_pixels = threshold.size
 
