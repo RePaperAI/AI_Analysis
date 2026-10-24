@@ -67,15 +67,12 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     """Pack rectangles only into connected, ink-free areas of the flattened sheet."""
     height, width = threshold.shape
     products = {
-        "sticky": ("Sticky Notes", 76, 76, (54, 190, 74)),
-        "memo": ("Memo Sheets", 100, 150, (44, 157, 211)),
-        "flashcards": ("Flashcards", 76, 127, (153, 76, 194)),
-        "scratch": ("Scratch Sheets", 216, 279, (220, 157, 0)),
+        # Product dimensions are the user-provided inch sizes converted to mm.
+        "sticky": ("Sticky Notes", 76.2, 76.2, (54, 190, 74)),
+        "memo": ("Memo Sheets", 76.2, 127.0, (44, 157, 211)),
+        "flashcards": ("Flashcards", 76.2, 127.0, (153, 76, 194)),
+        "scratch": ("Scratch Sheets", 101.6, 152.4, (220, 157, 0)),
     }
-    product_key = max(products, key=lambda key: float(demand.get(key, 0))) if demand else "sticky"
-    label, mm_w, mm_h, color = products[product_key]
-    px_per_mm = min(width / 216.0, height / 279.0)
-    piece_w, piece_h = max(32, int(mm_w * px_per_mm)), max(32, int(mm_h * px_per_mm))
     # Expand ink by a safety margin so cut lines do not run through nearby text,
     # handwriting, borders, or illustrations.
     ink = (threshold > 0).astype(np.uint8)
@@ -92,36 +89,56 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         total = integral[y + h, x + w] - integral[y, x + w] - integral[y + h, x] + integral[y, x]
         return float(total) / max(1, w * h)
 
-    # Scan candidate origins at a fine stride. A candidate must be effectively
-    # 100% blank; the dilation above supplies the practical cutting clearance.
-    stride = 6
-    for y in range(margin_y, height - margin_y - piece_h + 1, stride):
-        for x in range(margin_x, width - margin_x - piece_w + 1, stride):
-            if len(pieces) >= 12 or np.any(reserved[y:y + piece_h, x:x + piece_w]):
-                continue
-            if blank_ratio(x, y, piece_w, piece_h) >= .995:
-                reserved[y:y + piece_h, x:x + piece_w] = 1
-                pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
-                               "label": label, "size_mm": f"{mm_w} x {mm_h} mm"})
+    def place_product(product_key: str, quota: int) -> None:
+        label, mm_w, mm_h, color = products[product_key]
+        px_per_mm = min(width / 216.0, height / 279.0)
+        # Try both orientations so memo sheets and flashcards use space efficiently.
+        orientations = [(mm_w, mm_h), (mm_h, mm_w)]
+        for physical_w, physical_h in orientations:
+            if len(pieces) >= 12 or sum(1 for p in pieces if p["product"] == product_key) >= quota:
+                break
+            piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
+            # Scan candidate origins at a fine stride. A candidate must be effectively
+            # 100% blank; the dilation above supplies practical cutting clearance.
+            for y in range(margin_y, height - margin_y - piece_h + 1, 6):
+                for x in range(margin_x, width - margin_x - piece_w + 1, 6):
+                    if len(pieces) >= 12 or sum(1 for p in pieces if p["product"] == product_key) >= quota:
+                        break
+                    if np.any(reserved[y:y + piece_h, x:x + piece_w]):
+                        continue
+                    if blank_ratio(x, y, piece_w, piece_h) >= .995:
+                        reserved[y:y + piece_h, x:x + piece_w] = 1
+                        pieces.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
+                                       "label": label, "product": product_key,
+                                       "size_mm": f"{physical_w} x {physical_h} mm"})
 
-    # If the most-requested product is too large for the blank regions, try the
-    # next requested product instead of returning an unusable empty plan.
-    if not pieces and demand:
-        fallback = dict(demand)
-        fallback[product_key] = -1
-        if any(float(value) > 0 for value in fallback.values()):
-            return _make_cutting_plan(sheet, threshold, fallback)
+    demand_values = {key: max(0.0, float(demand.get(key, 0))) for key in products}
+    if not any(demand_values.values()):
+        demand_values["sticky"] = 1
+    max_demand = max(demand_values.values())
+    # High-demand items get up to three requested pieces; lower-demand items get
+    # fewer. Every non-zero demand category gets at least one attempt.
+    for product_key, value in sorted(demand_values.items(), key=lambda item: item[1], reverse=True):
+        if value <= 0:
+            continue
+        quota = max(1, int(round(3 * value / max_demand)))
+        place_product(product_key, quota)
 
     annotated = sheet.copy()
     for piece in pieces:
         x, y, w, h = piece["x"], piece["y"], piece["width"], piece["height"]
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 5)
+        piece_color = products[piece["product"]][3]
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), piece_color, 5)
         cv2.rectangle(annotated, (x, y), (x + min(w, 190), y + 34), (255, 255, 255), -1)
-        cv2.putText(annotated, label, (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .7, color, 2, cv2.LINE_AA)
+        cv2.putText(annotated, piece["label"], (x + 8, y + 24), cv2.FONT_HERSHEY_SIMPLEX, .7, piece_color, 2, cv2.LINE_AA)
     if not pieces:
         status = "No clean product-sized region found; recycle recommended"
     else:
-        status = f"{len(pieces)} {label.lower()} planned; remaining marked content goes to recycling"
+        counts = {}
+        for piece in pieces:
+            counts[piece["label"]] = counts.get(piece["label"], 0) + 1
+        summary = ", ".join(f"{count} {name}" for name, count in counts.items())
+        status = f"Planned: {summary}; remaining marked content goes to recycling"
     ok, encoded = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
     if not ok:
         return "", pieces, status

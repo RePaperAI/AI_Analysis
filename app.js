@@ -4,7 +4,7 @@ const setText = (id, value) => { const element = $(id); if (element) element.tex
 let hasScan = false;
 
 function recommend(blank) {
-  const sizes = { scratch: '8.5 x 11 in (Letter) or A4', memo: '3 x 3 or 4 x 6 in', flashcards: '3 x 5 or 4 x 6 in', sticky: '3 in x 3 in' };
+  const sizes = { scratch: '4 x 6 in', memo: '3 x 5 in', flashcards: '3 x 5 in', sticky: '3 x 3 in' };
   const labels = { scratch: 'scratch sheets', memo: 'memo sheets', flashcards: 'flashcards', sticky: 'sticky notes' };
   const inputs = [...document.querySelectorAll('[data-demand]')];
   const values = inputs.length ? inputs.map(input => ({ name: input.dataset.demand, value: Number(input.value), size: sizes[input.dataset.demand] })) : [{ name: 'sticky', value: 90, size: sizes.sticky }];
