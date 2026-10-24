@@ -6,7 +6,7 @@ let hasScan = false;
 function recommend(blank) {
   const sizes = { scratch: '4 x 6 in', memo: '3 x 5 in', flashcards: '3 x 5 in', sticky: '3 x 3 in' };
   const labels = { scratch: 'scratch sheets', memo: 'memo sheets', flashcards: 'flashcards', sticky: 'sticky notes' };
-  const inputs = [...document.querySelectorAll('[data-demand]')];
+  const inputs = [...document.querySelectorAll('.demand-card input[type=range][data-demand]')];
   const values = inputs.length ? inputs.map(input => ({ name: input.dataset.demand, value: Number(input.value), size: sizes[input.dataset.demand] })) : [{ name: 'sticky', value: 90, size: sizes.sticky }];
   const demand = values.sort((a, b) => b.value - a.value)[0];
   const enough = blank >= 20;
@@ -38,7 +38,7 @@ async function acceptFile(file) {
   if (preview) { preview.src = source; preview.hidden = false; }
   const content = $('dropContent'); if (content) content.hidden = true;
   const analysis = $('analysis'); if (analysis) analysis.classList.remove('hidden'); setText('confidence', 'Analyzing with Python...');
-  const body = new FormData(); body.append('image', file, file.name || 'scan.jpg'); body.append('demand', JSON.stringify(Object.fromEntries([...document.querySelectorAll('[data-demand]')].map(input => [input.dataset.demand, Number(input.value)]))));
+  const body = new FormData(); body.append('image', file, file.name || 'scan.jpg'); body.append('demand', JSON.stringify(Object.fromEntries([...document.querySelectorAll('.demand-card input[type=range][data-demand]')].map(input => [input.dataset.demand, Number(input.value)]))));
   const uploadButton = $('uploadButton');
   if (uploadButton) uploadButton.disabled = true;
   try {
@@ -86,6 +86,32 @@ function updateDemandSummary() {
   }
   setText('demandSummaryLevel', level);
 }
-document.querySelectorAll('input[type=range][data-demand]').forEach(input => input.addEventListener('input', event => { const output = event.target.nextElementSibling; if (output && (output.matches('output') || output.tagName === 'STRONG')) { output.value = event.target.value; output.textContent = `${event.target.value}%`; } updateDemandSummary(); const blank = Number.parseInt(($('blankStat') || {}).textContent, 10); if (hasScan && Number.isFinite(blank)) recommend(blank); }));
+const demandKeys = ['sticky', 'scratch', 'memo', 'flashcards'];
+function dashboardDemandInput(key) { return document.querySelector(`.demand-card input[data-demand="${key}"]`); }
+function settingsDemandInput(key) { return document.querySelector(`#modal input[type="range"][data-demand="${key}"]`); }
+function syncSettingsFromDashboard() {
+  demandKeys.forEach(key => {
+    const source = dashboardDemandInput(key); const target = settingsDemandInput(key);
+    if (!source || !target) return;
+    target.value = source.value;
+    const valueId = { sticky: 'stickyValue', scratch: 'scratchValue', memo: 'memoValue', flashcards: 'flashValue' }[key];
+    setText(valueId, `${source.value}%`);
+  });
+}
+function syncDashboardFromSettings() {
+  demandKeys.forEach(key => {
+    const source = settingsDemandInput(key); const target = dashboardDemandInput(key);
+    if (!source || !target) return;
+    target.value = source.value;
+    const output = target.nextElementSibling;
+    if (output) { output.value = source.value; output.textContent = `${source.value}%`; }
+  });
+  updateDemandSummary();
+  const blank = Number.parseInt(($('blankStat') || {}).textContent, 10);
+  if (hasScan && Number.isFinite(blank)) recommend(blank);
+}
+document.querySelectorAll('.demand-card input[type=range][data-demand]').forEach(input => input.addEventListener('input', () => { syncSettingsFromDashboard(); updateDemandSummary(); const blank = Number.parseInt(($('blankStat') || {}).textContent, 10); if (hasScan && Number.isFinite(blank)) recommend(blank); }));
+document.querySelectorAll('#modal input[type=range][data-demand]').forEach(input => input.addEventListener('input', syncDashboardFromSettings));
+syncSettingsFromDashboard();
 updateDemandSummary();
 const printBtn = $('printBtn'); if (printBtn) printBtn.addEventListener('click', () => window.print());
