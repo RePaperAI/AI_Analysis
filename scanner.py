@@ -218,6 +218,14 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     confidence = round(max(50, min(99, detection_confidence * 0.65 + quality * 0.35)))
     full_ink = np.zeros_like(gray, dtype=np.uint8)
     full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = threshold
+    # Usable area is practical cuttable paper, not simply white pixels. Remove
+    # a clearance around all detected ink and the outer sheet border first.
+    safe_ink = cv2.dilate((full_ink > 0).astype(np.uint8),
+                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
+    safe_ink[[0, 1, -2, -1], :] = 1
+    safe_ink[:, [0, 1, -2, -1]] = 1
+    interior = safe_ink[margin_y:height - margin_y, margin_x:width - margin_x]
+    usable = round(float(np.count_nonzero(interior == 0)) / max(1, interior.size) * 100, 1)
     plan_image, pieces, plan_status = _make_cutting_plan(sheet, full_ink, demand or {})
     return {
         "blank": usable,
