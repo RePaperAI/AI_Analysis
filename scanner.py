@@ -229,6 +229,7 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     plan_image, pieces, plan_status = _make_cutting_plan(sheet, full_ink, demand or {})
     return {
         "blank": usable,
+        "unusable": round(100 - usable, 1),
         "printed": printed,
         "damage": damage,
         "confidence": confidence,
