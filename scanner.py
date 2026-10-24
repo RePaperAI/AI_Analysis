@@ -15,7 +15,23 @@ import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
+CONFIG_PATH = ROOT / "pieces_config.json"
 app = Flask(__name__, static_folder=str(ROOT))
+
+
+def _load_products() -> dict:
+    """Load configurable products and convert inch dimensions to millimetres."""
+    with CONFIG_PATH.open("r", encoding="utf-8") as config_file:
+        raw = json.load(config_file)
+    products = {}
+    for key, item in raw["products"].items():
+        products[key] = (
+            item["label"],
+            float(item["width_in"]) * 25.4,
+            float(item["height_in"]) * 25.4,
+            tuple(item["color"]),
+        )
+    return products
 
 
 @app.after_request
@@ -66,14 +82,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
 def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -> tuple[str, list[dict], str]:
     """Pack rectangles only into connected, ink-free areas of the flattened sheet."""
     height, width = threshold.shape
-    products = {
-        # Product dimensions are the user-provided inch sizes converted to mm.
-        "sticky": ("Sticky Notes", 76.2, 76.2, (54, 190, 74)),
-        "mini_sticky": ("Mini Sticky Notes", 38.1, 50.8, (35, 160, 120)),
-        "memo": ("Memo Sheets", 76.2, 127.0, (44, 157, 211)),
-        "flashcards": ("Flashcards", 76.2, 127.0, (153, 76, 194)),
-        "scratch": ("Scratch Sheets", 101.6, 152.4, (220, 157, 0)),
-    }
+    products = _load_products()
     # Expand ink by a safety margin so cut lines do not run through nearby text,
     # handwriting, borders, or illustrations.
     ink = (threshold > 0).astype(np.uint8)

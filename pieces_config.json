@@ -1,0 +1,39 @@
+{
+  "products": {
+    "sticky": {
+      "label": "Sticky Notes",
+      "width_in": 3.0,
+      "height_in": 3.0,
+      "default_demand": 69,
+      "color": [54, 190, 74]
+    },
+    "mini_sticky": {
+      "label": "Mini Sticky Notes",
+      "width_in": 1.5,
+      "height_in": 2.0,
+      "default_demand": 40,
+      "color": [35, 160, 120]
+    },
+    "memo": {
+      "label": "Memo Sheets",
+      "width_in": 3.0,
+      "height_in": 5.0,
+      "default_demand": 50,
+      "color": [44, 157, 211]
+    },
+    "flashcards": {
+      "label": "Flashcards",
+      "width_in": 3.0,
+      "height_in": 5.0,
+      "default_demand": 25,
+      "color": [153, 76, 194]
+    },
+    "scratch": {
+      "label": "Scratch Sheets",
+      "width_in": 4.0,
+      "height_in": 6.0,
+      "default_demand": 100,
+      "color": [220, 157, 0]
+    }
+  }
+}
