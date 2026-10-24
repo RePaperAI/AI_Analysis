@@ -110,7 +110,11 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
                         continue
                     ratio = blank_ratio(x, y, piece_w, piece_h)
                     if ratio >= .995:
-                        score = ratio + 0.02 * (x / width) + 0.008 * (y / height)
+                        # Sticky notes are packed top-down so a tall blank column
+                        # can produce multiple stacked notes. Larger cards still
+                        # prefer the lower-right open area.
+                        vertical_bias = -0.008 if product_key == "sticky" else 0.008
+                        score = ratio + 0.02 * (x / width) + vertical_bias * (y / height)
                         if best is None or score > best[0]:
                             best = (score, x, y)
             if best is None:
@@ -130,7 +134,7 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     for product_key, value in sorted(demand_values.items(), key=lambda item: item[1], reverse=True):
         if value <= 0:
             continue
-        quota = max(1, int(round(3 * value / max_demand)))
+        quota = min(3, max(1, int(np.ceil(3 * value / max_demand))))
         place_product(product_key, quota)
 
     annotated = sheet.copy()
