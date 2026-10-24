@@ -178,16 +178,17 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         annotated[y:y + h, x:x + w] = np.array(piece_color, dtype=np.uint8)
         border = tuple(max(0, int(channel * .72)) for channel in piece_color)
         cv2.rectangle(annotated, (x, y), (x + w, y + h), border, 5)
-        title = piece["label"]
+        title = "Mini Sticky" if piece["product"] == "mini_sticky" else piece["label"]
         dimensions = piece["size_in"]
         font = cv2.FONT_HERSHEY_SIMPLEX
-        scale = max(0.45, min(1.25, min(w / max(1, len(title) * 24), h / 90)))
-        title_size = cv2.getTextSize(title, font, scale, 2)[0]
+        thickness = 2
+        scale = max(0.35, min(1.25, min(w / max(1, len(title) * 24), h / 90)))
+        title_size = cv2.getTextSize(title, font, scale, thickness)[0]
         tx = x + max(5, (w - title_size[0]) // 2)
         ty = y + max(title_size[1] + 8, (h + title_size[1]) // 2 - 10)
         dim_scale = max(.4, scale * .65)
         dim_size = cv2.getTextSize(dimensions, font, dim_scale, 1)[0]
-        cv2.putText(annotated, title, (tx, ty), font, scale, (10, 10, 10), 2, cv2.LINE_AA)
+        cv2.putText(annotated, title, (tx, ty), font, scale, (10, 10, 10), thickness, cv2.LINE_AA)
         dx = x + max(5, (w - dim_size[0]) // 2)
         cv2.putText(annotated, dimensions, (dx, ty + dim_size[1] + 8), font, dim_scale, (10, 10, 10), 1, cv2.LINE_AA)
     if not pieces:
