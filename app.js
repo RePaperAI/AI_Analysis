@@ -108,8 +108,15 @@ function syncDashboardFromSettings() {
   const blank = Number.parseInt(($('blankStat') || {}).textContent, 10);
   if (hasScan && Number.isFinite(blank)) recommend(blank);
 }
-document.querySelectorAll('.demand-card input[type=range][data-demand]').forEach(input => input.addEventListener('input', () => { syncSettingsFromDashboard(); updateDemandSummary(); const blank = Number.parseInt(($('blankStat') || {}).textContent, 10); if (hasScan && Number.isFinite(blank)) recommend(blank); }));
-document.querySelectorAll('#modal input[type=range][data-demand]').forEach(input => input.addEventListener('input', syncDashboardFromSettings));
+function updateSliderPercentage(input) {
+  const value = `${input.value}%`;
+  const rowOutput = input.closest('.demand-row')?.querySelector('output');
+  if (rowOutput) rowOutput.textContent = value;
+  const valueIds = { sticky: 'stickyValue', mini_sticky: 'miniStickyValue', scratch: 'scratchValue', memo: 'memoValue', flashcards: 'flashValue' };
+  if (valueIds[input.dataset.demand]) setText(valueIds[input.dataset.demand], value);
+}
+document.querySelectorAll('.demand-card input[type=range][data-demand]').forEach(input => input.addEventListener('input', event => { updateSliderPercentage(event.target); syncSettingsFromDashboard(); updateDemandSummary(); const blank = Number.parseInt(($('blankStat') || {}).textContent, 10); if (hasScan && Number.isFinite(blank)) recommend(blank); }));
+document.querySelectorAll('#modal input[type=range][data-demand]').forEach(input => input.addEventListener('input', event => { updateSliderPercentage(event.target); syncDashboardFromSettings(); }));
 syncSettingsFromDashboard();
 updateDemandSummary();
 const printBtn = $('printBtn'); if (printBtn) printBtn.addEventListener('click', () => window.print());
