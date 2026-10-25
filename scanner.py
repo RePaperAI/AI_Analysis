@@ -89,7 +89,9 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     ink = (threshold > 0).astype(np.uint8)
     ink[[0, 1, -2, -1], :] = 1
     ink[:, [0, 1, -2, -1]] = 1
-    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
+    # A smaller layout clearance preserves usable edge space; the separate
+    # usable-area metric remains more conservative.
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13)))
     blank = (ink == 0).astype(np.uint8)
     integral = cv2.integral(blank)
     # The detected border is already part of the ink mask, so keep only a small
@@ -191,6 +193,8 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         cv2.putText(annotated, title, (tx, ty), font, scale, (10, 10, 10), thickness, cv2.LINE_AA)
         dx = x + max(5, (w - dim_size[0]) // 2)
         cv2.putText(annotated, dimensions, (dx, ty + dim_size[1] + 8), font, dim_scale, (10, 10, 10), 1, cv2.LINE_AA)
+    # Keep the page boundary clearly visible in the final plan.
+    cv2.rectangle(annotated, (3, 3), (width - 4, height - 4), (0, 0, 0), 6)
     if not pieces:
         status = "No clean product-sized region found; recycle recommended"
     else:
