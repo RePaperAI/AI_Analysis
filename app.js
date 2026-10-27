@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 const setText = (id, value) => { const element = $(id); if (element) element.textContent = value; };
 let hasScan = false;
+let latestResult = null;
 
 function recommend(blank) {
   const sizes = { scratch: '4 x 6 in', memo: '3 x 5 in', flashcards: '3 x 5 in', sticky: '3 x 3 in', mini_sticky: '1.5 x 2 in' };
@@ -17,7 +18,7 @@ function recommend(blank) {
 }
 
 function showResult(result) {
-  hasScan = true; setText('blankStat', `${result.blank}%`); setText('usableLegend', `${result.blank}%`); setText('printedStat', `${result.unusable ?? (100 - result.blank).toFixed(1)}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
+  latestResult = result; hasScan = true; setText('blankStat', `${result.blank}%`); setText('usableLegend', `${result.blank}%`); setText('printedStat', `${result.unusable ?? (100 - result.blank).toFixed(1)}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
   const planImage = document.querySelector('.cutting-plan-image');
   if (planImage && result.plan_image) { planImage.src = result.plan_image; planImage.alt = result.plan_status || 'OpenCV-generated cutting plan'; planImage.classList.remove('missing'); }
@@ -25,7 +26,17 @@ function showResult(result) {
   (result.pieces || []).forEach(piece => { if (Object.prototype.hasOwnProperty.call(counts, piece.product)) counts[piece.product] += 1; });
   setText('countSticky', counts.sticky); setText('countMiniSticky', counts.mini_sticky); setText('countMemo', counts.memo);
   setText('countScratch', counts.scratch); setText('countFlashcards', counts.flashcards);
+  const gcodeButton = $('downloadGcode'); if (gcodeButton) gcodeButton.disabled = !(result.pieces && result.pieces.length);
   recommend(result.blank);
+}
+
+async function downloadGcode() {
+  if (!latestResult || !latestResult.pieces?.length) return;
+  const response = await fetch('/api/cutting/gcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return setText('confidence', `G-code failed: ${result.error || response.status}`);
+  const blob = new Blob([result.gcode], { type: 'text/plain' });
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'repaper-cut-plan.gcode'; link.click(); URL.revokeObjectURL(link.href);
 }
 
 async function acceptFile(file) {
@@ -120,3 +131,4 @@ document.querySelectorAll('#modal input[type=range][data-demand]').forEach(input
 syncSettingsFromDashboard();
 updateDemandSummary();
 const printBtn = $('printBtn'); if (printBtn) printBtn.addEventListener('click', () => window.print());
+const gcodeButton = $('downloadGcode'); if (gcodeButton) gcodeButton.addEventListener('click', downloadGcode);

@@ -13,6 +13,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
+from cutting import CutterConfig, generate_gcode
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "pieces_config.json"
@@ -307,6 +308,29 @@ def analyze():
     except Exception as exc:
         app.logger.exception("Image analysis failed")
         return jsonify(error=f"Image analysis failed: {exc}"), 422
+
+
+@app.post("/api/cutting/gcode")
+def cutting_gcode():
+    """Return reviewed, machine-space G-code without sending it to a printer."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        config_data = payload.get("config") or {}
+        config = CutterConfig(
+            paper_width_mm=float(config_data.get("paper_width_mm", 216.0)),
+            paper_height_mm=float(config_data.get("paper_height_mm", 279.0)),
+            origin_x_mm=float(config_data.get("origin_x_mm", 10.0)),
+            origin_y_mm=float(config_data.get("origin_y_mm", 10.0)),
+            safe_z_mm=float(config_data.get("safe_z_mm", 5.0)),
+            blade_z_mm=float(config_data.get("blade_z_mm", 0.0)),
+            travel_feed=int(config_data.get("travel_feed", 2400)),
+            cut_feed=int(config_data.get("cut_feed", 600)),
+            passes=int(config_data.get("passes", 1)),
+        )
+        gcode = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
+        return jsonify(gcode=gcode, piece_count=len(payload.get("pieces", [])))
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify(error=str(exc)), 400
 
 
 if __name__ == "__main__":
