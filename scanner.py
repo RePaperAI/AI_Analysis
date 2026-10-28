@@ -90,9 +90,9 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     ink = (threshold > 0).astype(np.uint8)
     ink[[0, 1, -2, -1], :] = 1
     ink[:, [0, 1, -2, -1]] = 1
-    # A smaller layout clearance preserves usable edge space; the separate
-    # usable-area metric remains more conservative.
-    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13)))
+    # The cutting mask uses a wider clearance than the layout preview so faint
+    # exam text and thin lines cannot be mistaken for blank paper.
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
     blank = (ink == 0).astype(np.uint8)
     integral = cv2.integral(blank)
     # The detected border is already part of the ink mask, so keep only a small
@@ -114,14 +114,18 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         if demand_value <= 0:
             continue
         label, mm_w, mm_h, _ = products[product_key]
-        px_per_mm = min(width / 216.0, height / 279.0)
+        # A4 sheet coordinate system: 210 x 297 mm.
+        px_per_mm = min(width / 210.0, height / 297.0)
         orientations = {(mm_w, mm_h), (mm_h, mm_w)}
         for physical_w, physical_h in orientations:
             piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
             for y in range(margin_y, height - margin_y - piece_h + 1, 6):
                 for x in range(margin_x, width - margin_x - piece_w + 1, 6):
                     ratio = blank_ratio(x, y, piece_w, piece_h)
-                    if ratio >= .995:
+                    # A cut rectangle must be completely clear after dilation;
+                    # allowing even a small ink fraction can place mini pieces
+                    # over text, barcodes, or answer boxes.
+                    if ratio >= 0.99999:
                         area = piece_w * piece_h
                         # Demand is a preference, while area recovery is the main
                         # objective. This lets smaller products fill leftover gaps.
@@ -252,7 +256,9 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     quality = 100 - min(45, abs(lighting - 190) / 4)
     confidence = round(max(50, min(99, detection_confidence * 0.65 + quality * 0.35)))
     full_ink = np.zeros_like(gray, dtype=np.uint8)
-    full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = threshold
+    _, plan_light_ink = cv2.threshold(roi, 245, 255, cv2.THRESH_BINARY_INV)
+    plan_threshold = cv2.bitwise_or(threshold, plan_light_ink)
+    full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = plan_threshold
     # Usable area is practical cuttable paper, not simply white pixels. Remove
     # a clearance around all detected ink and the outer sheet border first.
     safe_ink = cv2.dilate((full_ink > 0).astype(np.uint8),
@@ -317,8 +323,8 @@ def cutting_gcode():
     try:
         config_data = payload.get("config") or {}
         config = CutterConfig(
-            paper_width_mm=float(config_data.get("paper_width_mm", 216.0)),
-            paper_height_mm=float(config_data.get("paper_height_mm", 279.0)),
+            paper_width_mm=float(config_data.get("paper_width_mm", 210.0)),
+            paper_height_mm=float(config_data.get("paper_height_mm", 297.0)),
             origin_x_mm=float(config_data.get("origin_x_mm", 10.0)),
             origin_y_mm=float(config_data.get("origin_y_mm", 10.0)),
             safe_z_mm=float(config_data.get("safe_z_mm", 5.0)),

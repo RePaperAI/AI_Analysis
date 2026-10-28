@@ -11,8 +11,9 @@ from typing import Iterable
 
 @dataclass(frozen=True)
 class CutterConfig:
-    paper_width_mm: float = 216.0
-    paper_height_mm: float = 279.0
+    # A4 paper: 210 x 297 mm.
+    paper_width_mm: float = 210.0
+    paper_height_mm: float = 297.0
     origin_x_mm: float = 10.0
     origin_y_mm: float = 10.0
     safe_z_mm: float = 5.0
