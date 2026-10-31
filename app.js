@@ -18,6 +18,8 @@ function recommend(blank) {
 }
 
 function showResult(result) {
+  const preview = $('preview');
+  if (preview && result.sheet_image) { preview.src = result.sheet_image; preview.alt = 'Perspective-corrected scanned sheet'; preview.classList.remove('missing'); }
   latestResult = result; hasScan = true; setText('blankStat', `${result.blank}%`); setText('usableLegend', `${result.blank}%`); setText('printedStat', `${result.unusable ?? (100 - result.blank).toFixed(1)}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
   const planImage = document.querySelector('.cutting-plan-image');
@@ -62,11 +64,45 @@ async function acceptFile(file) {
   }
 }
 
+let cameraStream = null;
+function stopCamera() {
+  if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+  cameraStream = null;
+  const panel = $('cameraPanel'); const video = $('cameraPreview');
+  if (video) video.srcObject = null;
+  if (panel) panel.hidden = true;
+}
+async function openCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setText('confidence', 'Camera access requires a browser on localhost or HTTPS.');
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    const video = $('cameraPreview'); const panel = $('cameraPanel');
+    video.srcObject = cameraStream; panel.hidden = false; await video.play();
+    setText('confidence', 'Camera ready — place the whole paper in view.');
+  } catch (error) {
+    setText('confidence', `Camera unavailable: ${error.message || 'permission denied'}`);
+    stopCamera();
+  }
+}
+function captureCameraFrame() {
+  const video = $('cameraPreview'); const canvas = $('cameraCanvas');
+  if (!video || !canvas || !video.videoWidth) return setText('confidence', 'Camera is not ready yet.');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(blob => { if (blob) { stopCamera(); acceptFile(new File([blob], 'usb-camera-scan.jpg', { type: 'image/jpeg' })); } }, 'image/jpeg', .92);
+}
+
 const fileInput = $('fileInput');
 const uploadButton = $('uploadButton');
 if (fileInput) fileInput.addEventListener('change', event => acceptFile(event.target.files[0]));
 const dropzone = $('dropzone'); if (dropzone) { dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); }); dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging')); dropzone.addEventListener('drop', event => { event.preventDefault(); dropzone.classList.remove('dragging'); acceptFile(event.dataTransfer.files[0]); }); }
 const sampleBtn = $('sampleBtn'); if (sampleBtn) sampleBtn.addEventListener('click', async () => { const response = await fetch('Assets/Sample_Worksheet.png'); const blob = await response.blob(); acceptFile(new File([blob], 'sample.png', { type: 'image/png' })); });
+const cameraButton = $('cameraButton'); if (cameraButton) cameraButton.addEventListener('click', openCamera);
+const captureButton = $('captureButton'); if (captureButton) captureButton.addEventListener('click', captureCameraFrame);
+const closeCameraButton = $('closeCameraButton'); if (closeCameraButton) closeCameraButton.addEventListener('click', stopCamera);
 function updateDemandSummary() {
   const labels = { sticky: 'Sticky Notes', mini_sticky: 'Mini Sticky Notes', scratch: 'Scratch Sheets', memo: 'Memo Sheets', flashcards: 'Flashcards' };
   const rows = [...document.querySelectorAll('.demand-card input[type=range][data-demand]')]

@@ -58,7 +58,7 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
     """Convert image-space rectangles into relative perimeter-cut G-code.
 
     Image coordinates start at the top-left. Machine coordinates use the
-    paper's bottom-left as (0, 0): X increases rightward and Y is inverted. The
+    paper's bottom-right as (0, 0): X increases toward the left and Y is inverted. The
     generated file uses relative moves, so the printer's current position is
     treated as the origin when the file starts.
     """
@@ -86,7 +86,7 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
             raise ValueError("Cutting pieces overlap; refusing to generate unsafe G-code")
 
     def mx(px: float) -> float:
-        return px / image_width * cfg.paper_width_mm
+        return cfg.paper_width_mm - px / image_width * cfg.paper_width_mm
 
     def my(py: float) -> float:
         return cfg.paper_height_mm - py / image_height * cfg.paper_height_mm
@@ -102,7 +102,7 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
     lines = [
         "; RePaper AI blade cutting plan",
         "; Relative measurement mode: current printer position is X0 Y0 Z0",
-        "; Place the paper bottom-left corner at the current X/Y position",
+        "; Place the paper bottom-right corner at the current X/Y position",
         "; Review paper placement, blade depth, and feed rates before running",
         "G21 ; millimetres",
         "G91 ; relative positioning",
@@ -133,7 +133,7 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
                 current_x, current_y = target_x, target_y
         lines.append(cut_move("Z", cfg.safe_z_mm - cfg.blade_z_mm, cfg.travel_feed))
     lines.extend([
-        cut_move("Z", -cfg.safe_z_mm, cfg.travel_feed),
+        # Stay at the raised/safe Z height while returning to the start.
         f"G0 X{-current_x:+.2f} Y{-current_y:+.2f} F{cfg.travel_feed}",
         "; End of plan",
         "M5",

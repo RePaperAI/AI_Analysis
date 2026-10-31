@@ -52,6 +52,12 @@ def _order_points(points: np.ndarray) -> np.ndarray:
                      points[np.argmax(sums)], points[np.argmax(diffs)]], dtype="float32")
 
 
+def _target_dimensions(width: float, height: float) -> tuple[int, int]:
+    """Resize a flattened sheet without changing its aspect ratio."""
+    scale = min(1.0, 1200.0 / max(1.0, width, height))
+    return max(600, int(round(width * scale))), max(600, int(round(height * scale)))
+
+
 def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
     """Return a top-down sheet image and a confidence score for its detection."""
     height, width = image.shape[:2]
@@ -73,7 +79,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
             if w < 100 or h < 100:
                 break
-            target_w, target_h = 900, max(1100, int(900 * h / max(w, 1)))
+            target_w, target_h = _target_dimensions(w, h)
             destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
             matrix = cv2.getPerspectiveTransform(quad, destination)
             return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(99.0, 70 + area / image_area * 30)
@@ -97,7 +103,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             if w > 100 and h > 100:
                 quad = np.array([[x, y], [x + w - 1, y],
                                  [x + w - 1, y + h - 1], [x, y + h - 1]], dtype="float32")
-                target_w, target_h = 900, max(1100, int(900 * h / max(w, 1)))
+                target_w, target_h = _target_dimensions(w, h)
                 destination = np.array([[0, 0], [target_w - 1, 0],
                                         [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
                 matrix = cv2.getPerspectiveTransform(quad, destination)
@@ -296,6 +302,8 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     interior = safe_ink[margin_y:height - margin_y, margin_x:width - margin_x]
     usable = round(float(np.count_nonzero(interior == 0)) / max(1, interior.size) * 100, 1)
     plan_image, pieces, plan_status = _make_cutting_plan(sheet, full_ink, demand or {})
+    sheet_ok, sheet_encoded = cv2.imencode(".jpg", sheet, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    sheet_image = "data:image/jpeg;base64," + base64.b64encode(sheet_encoded.tobytes()).decode("ascii") if sheet_ok else ""
     return {
         "blank": usable,
         "unusable": round(100 - usable, 1),
@@ -305,6 +313,7 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
         "type": "document detected" if detection_confidence > 60 else "best-effort scan",
         "width": int(width),
         "height": int(height),
+        "sheet_image": sheet_image,
         "plan_image": plan_image,
         "pieces": pieces,
         "plan_status": plan_status,
