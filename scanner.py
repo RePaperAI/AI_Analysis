@@ -77,6 +77,31 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
             matrix = cv2.getPerspectiveTransform(quad, destination)
             return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(99.0, 70 + area / image_area * 30)
+
+    # Phone photos of blank paper often have no four strong Canny edges, and
+    # the bottom edge may be outside the camera frame. In that case, locate the
+    # largest bright paper region against the darker surroundings and use its
+    # bounding rectangle as a best-effort sheet boundary.
+    bright_cutoff = max(105, int(np.percentile(gray, 58)))
+    bright = cv2.threshold(gray, bright_cutoff, 255, cv2.THRESH_BINARY)[1]
+    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE,
+                              cv2.getStructuringElement(cv2.MORPH_RECT, (31, 31)))
+    bright = cv2.morphologyEx(bright, cv2.MORPH_OPEN,
+                              cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
+    bright_contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if bright_contours:
+        contour = max(bright_contours, key=cv2.contourArea)
+        area = cv2.contourArea(contour)
+        if area > image_area * 0.25:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w > 100 and h > 100:
+                quad = np.array([[x, y], [x + w - 1, y],
+                                 [x + w - 1, y + h - 1], [x, y + h - 1]], dtype="float32")
+                target_w, target_h = 900, max(1100, int(900 * h / max(w, 1)))
+                destination = np.array([[0, 0], [target_w - 1, 0],
+                                        [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
+                matrix = cv2.getPerspectiveTransform(quad, destination)
+                return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(85.0, 55 + area / image_area * 30)
     return small, 48.0
 
 
@@ -227,7 +252,9 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     normalized = cv2.divide(roi, background, scale=255)
     adaptive_ink = cv2.adaptiveThreshold(normalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                           cv2.THRESH_BINARY_INV, 35, 10)
-    _, raw_ink = cv2.threshold(roi, 225, 255, cv2.THRESH_BINARY_INV)
+    # A phone photo can make blank paper gray. Only substantially dark pixels
+    # count as printed content; brightness normalization handles shadows.
+    _, raw_ink = cv2.threshold(roi, 155, 255, cv2.THRESH_BINARY_INV)
     threshold = cv2.bitwise_or(adaptive_ink, raw_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
@@ -256,7 +283,8 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     quality = 100 - min(45, abs(lighting - 190) / 4)
     confidence = round(max(50, min(99, detection_confidence * 0.65 + quality * 0.35)))
     full_ink = np.zeros_like(gray, dtype=np.uint8)
-    _, plan_light_ink = cv2.threshold(roi, 245, 255, cv2.THRESH_BINARY_INV)
+    _, plan_light_ink = cv2.threshold(normalized, 220, 255, cv2.THRESH_BINARY_INV)
+    plan_light_ink = cv2.morphologyEx(plan_light_ink, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     plan_threshold = cv2.bitwise_or(threshold, plan_light_ink)
     full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = plan_threshold
     # Usable area is practical cuttable paper, not simply white pixels. Remove
@@ -325,8 +353,10 @@ def cutting_gcode():
         config = CutterConfig(
             paper_width_mm=float(config_data.get("paper_width_mm", 210.0)),
             paper_height_mm=float(config_data.get("paper_height_mm", 297.0)),
-            origin_x_mm=float(config_data.get("origin_x_mm", 10.0)),
-            origin_y_mm=float(config_data.get("origin_y_mm", 10.0)),
+            origin_x_mm=float(config_data.get("origin_x_mm", 0.0)),
+            origin_y_mm=float(config_data.get("origin_y_mm", 0.0)),
+            max_x_mm=float(config_data.get("max_x_mm", 290.0)),
+            max_y_mm=float(config_data.get("max_y_mm", 300.0)),
             safe_z_mm=float(config_data.get("safe_z_mm", 5.0)),
             blade_z_mm=float(config_data.get("blade_z_mm", 0.0)),
             travel_feed=int(config_data.get("travel_feed", 2400)),
