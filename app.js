@@ -20,6 +20,13 @@ function recommend(blank) {
 function showResult(result) {
   latestResult = result; hasScan = true; setText('blankStat', `${result.blank}%`); setText('usableLegend', `${result.blank}%`); setText('printedStat', `${result.unusable ?? (100 - result.blank).toFixed(1)}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
+  const currentSheet = $('preview');
+  if (currentSheet && result.sheet_image) {
+    currentSheet.src = result.sheet_image;
+    currentSheet.alt = 'Cropped, perspective-corrected A4 sheet';
+    currentSheet.hidden = false;
+    currentSheet.classList.remove('missing');
+  }
   const planImage = document.querySelector('.cutting-plan-image');
   if (planImage && result.plan_image) { planImage.src = result.plan_image; planImage.alt = result.plan_status || 'OpenCV-generated cutting plan'; planImage.classList.remove('missing'); }
   const counts = { sticky: 0, mini_sticky: 0, memo: 0, scratch: 0, flashcards: 0 };

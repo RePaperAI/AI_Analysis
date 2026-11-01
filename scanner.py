@@ -63,7 +63,7 @@ def _target_dimensions(width: float, height: float, portrait: bool | None = None
     return target_width, target_height
 
 
-def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
+def _flatten_sheet(image: np.ndarray, portrait_hint: bool | None = None) -> tuple[np.ndarray, float]:
     """Return a top-down sheet image and a confidence score for its detection."""
     height, width = image.shape[:2]
     scale = min(1.0, 1200.0 / max(height, width))
@@ -89,7 +89,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
                 w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
                 h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
                 if w >= 100 and h >= 100:
-                    target_w, target_h = _target_dimensions(w, h, portrait=False)
+                    target_w, target_h = _target_dimensions(w, h, portrait=portrait_hint)
                     destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
                     matrix = cv2.getPerspectiveTransform(quad, destination)
                     return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(95.0, 60 + area / image_area * 35)
@@ -109,7 +109,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
             h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
             if w >= 100 and h >= 100:
-                target_w, target_h = _target_dimensions(w, h, portrait=height > width)
+                target_w, target_h = _target_dimensions(w, h, portrait=portrait_hint if portrait_hint is not None else height > width)
                 destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
                 matrix = cv2.getPerspectiveTransform(quad, destination)
                 return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(99.0, 70 + area / image_area * 30)
@@ -133,7 +133,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             if w > 100 and h > 100:
                 quad = np.array([[x, y], [x + w - 1, y],
                                  [x + w - 1, y + h - 1], [x, y + h - 1]], dtype="float32")
-                target_w, target_h = _target_dimensions(w, h, portrait=height > width)
+                target_w, target_h = _target_dimensions(w, h, portrait=portrait_hint if portrait_hint is not None else height > width)
                 destination = np.array([[0, 0], [target_w - 1, 0],
                                         [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
                 matrix = cv2.getPerspectiveTransform(quad, destination)
@@ -282,7 +282,13 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
 
 
 def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
-    sheet, detection_confidence = _flatten_sheet(image)
+    original_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    original_height, original_width = original_gray.shape
+    edge_width = max(8, int(original_width * .04))
+    left_black = float(np.mean(original_gray[:, :edge_width] < 25))
+    right_black = float(np.mean(original_gray[:, -edge_width:] < 25))
+    portrait_capture = original_height > original_width or (left_black > .55 and right_black > .55)
+    sheet, detection_confidence = _flatten_sheet(image, portrait_hint=portrait_capture)
     gray = cv2.cvtColor(sheet, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape
     margin_y, margin_x = int(height * 0.04), int(width * 0.04)
@@ -354,8 +360,8 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
         "type": "document detected" if detection_confidence > 60 else "best-effort scan",
         "width": int(width),
         "height": int(height),
-        "paper_width_mm": 297.0 if width > height else 210.0,
-        "paper_height_mm": 210.0 if width > height else 297.0,
+        "paper_width_mm": 210.0 if height > width else 297.0,
+        "paper_height_mm": 297.0 if height > width else 210.0,
         "sheet_image": sheet_image,
         "plan_image": plan_image,
         "pieces": pieces,
