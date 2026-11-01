@@ -13,7 +13,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
-from cutting import CutterConfig, generate_gcode
+from cutting import CutterConfig, generate_gcode, load_cutter_config
+from machine_control import execute_gcode
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "pieces_config.json"
@@ -52,10 +53,14 @@ def _order_points(points: np.ndarray) -> np.ndarray:
                      points[np.argmax(sums)], points[np.argmax(diffs)]], dtype="float32")
 
 
-def _target_dimensions(width: float, height: float) -> tuple[int, int]:
-    """Resize a flattened sheet without changing its aspect ratio."""
-    scale = min(1.0, 1200.0 / max(1.0, width, height))
-    return max(600, int(round(width * scale))), max(600, int(round(height * scale)))
+def _target_dimensions(width: float, height: float, portrait: bool | None = None) -> tuple[int, int]:
+    """Normalize a flattened sheet to the correct portrait/landscape A4 ratio."""
+    is_landscape = width > height if portrait is None else not portrait
+    if is_landscape:
+        target_width, target_height = 1200, round(1200 * 210.0 / 297.0)
+    else:
+        target_height, target_width = 1200, round(1200 * 210.0 / 297.0)
+    return target_width, target_height
 
 
 def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
@@ -64,25 +69,50 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
     scale = min(1.0, 1200.0 / max(height, width))
     small = cv2.resize(image, None, fx=scale, fy=scale) if scale < 1 else image.copy()
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    image_area = small.shape[0] * small.shape[1]
+
+    if width > height:
+        bright_cutoff = max(105, int(np.percentile(gray, 58)))
+        bright = cv2.threshold(gray, bright_cutoff, 255, cv2.THRESH_BINARY)[1]
+        bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE,
+                                  cv2.getStructuringElement(cv2.MORPH_RECT, (31, 31)))
+        bright = cv2.morphologyEx(bright, cv2.MORPH_OPEN,
+                                  cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
+        bright_contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if bright_contours:
+            contour = max(bright_contours, key=cv2.contourArea)
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True)
+            if area > image_area * 0.30 and len(approx) == 4:
+                quad = _order_points(approx)
+                w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
+                h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
+                if w >= 100 and h >= 100:
+                    target_w, target_h = _target_dimensions(w, h, portrait=False)
+                    destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
+                    matrix = cv2.getPerspectiveTransform(quad, destination)
+                    return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(95.0, 60 + area / image_area * 35)
+
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     edges = cv2.Canny(blur, 50, 150)
     contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    image_area = small.shape[0] * small.shape[1]
-    for contour in contours[:25]:
+    for contour in contours[:80]:
         perimeter = cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, 0.03 * perimeter, True) if perimeter else []
         area = cv2.contourArea(contour)
-        if len(approx) == 4 and area > image_area * 0.25:
+        # Prefer the sheet-sized outer contour. Internal boxes and markings
+        # must not be accepted as the page boundary.
+        if len(approx) == 4 and area > image_area * 0.40 and cv2.isContourConvex(approx):
             quad = _order_points(approx)
             w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
             h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
-            if w < 100 or h < 100:
-                break
-            target_w, target_h = _target_dimensions(w, h)
-            destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
-            matrix = cv2.getPerspectiveTransform(quad, destination)
-            return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(99.0, 70 + area / image_area * 30)
+            if w >= 100 and h >= 100:
+                target_w, target_h = _target_dimensions(w, h, portrait=height > width)
+                destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
+                matrix = cv2.getPerspectiveTransform(quad, destination)
+                return cv2.warpPerspective(small, matrix, (target_w, target_h)), min(99.0, 70 + area / image_area * 30)
 
     # Phone photos of blank paper often have no four strong Canny edges, and
     # the bottom edge may be outside the camera frame. In that case, locate the
@@ -103,7 +133,7 @@ def _flatten_sheet(image: np.ndarray) -> tuple[np.ndarray, float]:
             if w > 100 and h > 100:
                 quad = np.array([[x, y], [x + w - 1, y],
                                  [x + w - 1, y + h - 1], [x, y + h - 1]], dtype="float32")
-                target_w, target_h = _target_dimensions(w, h)
+                target_w, target_h = _target_dimensions(w, h, portrait=height > width)
                 destination = np.array([[0, 0], [target_w - 1, 0],
                                         [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
                 matrix = cv2.getPerspectiveTransform(quad, destination)
@@ -128,6 +158,8 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     integral = cv2.integral(blank)
     # The detected border is already part of the ink mask, so keep only a small
     # outer search margin and preserve more usable paper near the edges.
+    # Keep only a small outer search margin. Detected dark objects, including
+    # scissors, clips, and tape, are handled by the ink/obstruction mask itself.
     margin_x, margin_y = int(width * .02), int(height * .02)
 
     def blank_ratio(x: int, y: int, w: int, h: int) -> float:
@@ -145,8 +177,9 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
         if demand_value <= 0:
             continue
         label, mm_w, mm_h, _ = products[product_key]
-        # A4 sheet coordinate system: 210 x 297 mm.
-        px_per_mm = min(width / 210.0, height / 297.0)
+        # Match the physical A4 orientation to the detected sheet orientation.
+        paper_width_mm, paper_height_mm = (297.0, 210.0) if width > height else (210.0, 297.0)
+        px_per_mm = min(width / paper_width_mm, height / paper_height_mm)
         orientations = {(mm_w, mm_h), (mm_h, mm_w)}
         for physical_w, physical_h in orientations:
             piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
@@ -163,6 +196,7 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
                         value = area * (0.45 + 0.55 * demand_value / 100.0)
                         candidates.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
                                            "label": label, "product": product_key,
+                                           "width_mm": float(physical_w), "height_mm": float(physical_h),
                                            "size_mm": f"{physical_w} x {physical_h} mm",
                                            "size_in": f"{physical_w / 25.4:g} x {physical_h / 25.4:g} in",
                                            "value": value})
@@ -313,6 +347,8 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
         "type": "document detected" if detection_confidence > 60 else "best-effort scan",
         "width": int(width),
         "height": int(height),
+        "paper_width_mm": 297.0 if width > height else 210.0,
+        "paper_height_mm": 210.0 if width > height else 297.0,
         "sheet_image": sheet_image,
         "plan_image": plan_image,
         "pieces": pieces,
@@ -359,23 +395,61 @@ def cutting_gcode():
     payload = request.get_json(silent=True) or {}
     try:
         config_data = payload.get("config") or {}
+        base_config = load_cutter_config()
         config = CutterConfig(
-            paper_width_mm=float(config_data.get("paper_width_mm", 210.0)),
-            paper_height_mm=float(config_data.get("paper_height_mm", 297.0)),
-            origin_x_mm=float(config_data.get("origin_x_mm", 0.0)),
-            origin_y_mm=float(config_data.get("origin_y_mm", 0.0)),
-            max_x_mm=float(config_data.get("max_x_mm", 290.0)),
-            max_y_mm=float(config_data.get("max_y_mm", 300.0)),
+            paper_width_mm=float(config_data.get("paper_width_mm", base_config.paper_width_mm)),
+            paper_height_mm=float(config_data.get("paper_height_mm", base_config.paper_height_mm)),
+            origin_x_mm=float(config_data.get("origin_x_mm", base_config.origin_x_mm)),
+            origin_y_mm=float(config_data.get("origin_y_mm", base_config.origin_y_mm)),
+            top_right_x_mm=base_config.top_right_x_mm,
+            top_right_y_mm=base_config.top_right_y_mm,
+            bottom_right_x_mm=base_config.bottom_right_x_mm,
+            bottom_right_y_mm=base_config.bottom_right_y_mm,
+            bottom_left_x_mm=base_config.bottom_left_x_mm,
+            bottom_left_y_mm=base_config.bottom_left_y_mm,
+            max_x_mm=float(config_data.get("max_x_mm", base_config.max_x_mm)),
+            max_y_mm=float(config_data.get("max_y_mm", base_config.max_y_mm)),
             safe_z_mm=float(config_data.get("safe_z_mm", 5.0)),
             blade_z_mm=float(config_data.get("blade_z_mm", 0.0)),
-            travel_feed=int(config_data.get("travel_feed", 2400)),
-            cut_feed=int(config_data.get("cut_feed", 600)),
-            passes=int(config_data.get("passes", 1)),
+            pen_up_z_mm=float(config_data.get("pen_up_z_mm", base_config.pen_up_z_mm)),
+            pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
+            travel_feed=int(config_data.get("travel_feed", base_config.travel_feed)),
+            cut_feed=int(config_data.get("cut_feed", base_config.cut_feed)),
+            passes=int(config_data.get("passes", base_config.passes)),
         )
         gcode = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
         return jsonify(gcode=gcode, piece_count=len(payload.get("pieces", [])))
     except (KeyError, TypeError, ValueError) as exc:
         return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/cutting/execute")
+def execute_cutting_gcode():
+    """Send the generated blade program to the configured printer after UI confirmation."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        config_data = payload.get("config") or {}
+        base_config = load_cutter_config()
+        config = CutterConfig(
+            paper_width_mm=float(config_data.get("paper_width_mm", base_config.paper_width_mm)),
+            paper_height_mm=float(config_data.get("paper_height_mm", base_config.paper_height_mm)),
+            top_right_x_mm=base_config.top_right_x_mm,
+            top_right_y_mm=base_config.top_right_y_mm,
+            bottom_right_x_mm=base_config.bottom_right_x_mm,
+            bottom_right_y_mm=base_config.bottom_right_y_mm,
+            bottom_left_x_mm=base_config.bottom_left_x_mm,
+            bottom_left_y_mm=base_config.bottom_left_y_mm,
+            max_x_mm=float(config_data.get("max_x_mm", base_config.max_x_mm)),
+            max_y_mm=float(config_data.get("max_y_mm", base_config.max_y_mm)),
+            pen_up_z_mm=float(config_data.get("pen_up_z_mm", base_config.pen_up_z_mm)),
+            pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
+        )
+        program = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
+        sent, logs = execute_gcode(program)
+        return jsonify(sent_commands=sent, status="completed", logs=logs)
+    except (KeyError, TypeError, ValueError, OSError, RuntimeError, TimeoutError) as exc:
+        app.logger.exception("Printer execution failed")
+        return jsonify(error=str(exc), logs=[f"ERROR: {exc}"]), 422
 
 
 if __name__ == "__main__":

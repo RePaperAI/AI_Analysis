@@ -11,6 +11,17 @@ Open http://127.0.0.1:5000. Upload a JPG, PNG, or WebP image. The service detect
 
 Product sizes, colors, and default demand values are configured in `pieces_config.json`.
 
-The cutting module generates relative perimeter G-code for a blade-equipped printer using A4 paper dimensions (210 x 297 mm). The printer's current position is treated as the origin when the file starts. Place the paper's bottom-right corner at that position; X increases toward the left and Y increases upward. The configured printer limits are `X=0..290 mm`, `Y=0..300 mm`, so portrait A4 fits within the Y travel. Review `CutterConfig` in `cutting.py` and test with the blade raised before cutting; the dashboard only generates/downloads G-code and does not move the printer automatically.
+The cutting module generates relative perimeter G-code for a blade-equipped printer using A4 dimensions (210 x 297 mm portrait or 297 x 210 mm landscape). The printer's current position is the origin. Place the paper's bottom-right corner there; X increases toward the left and Y increases upward. The configured printer limits are `X=0..310 mm`, `Y=0..300 mm`. Automated cutting travels at pen-up `Z=44 mm` and lowers to pen-down `Z=41 mm` only during perimeter cuts. The machine must be homed and positioned at pen-up height before executing the relative file; test with the blade raised before cutting.
 
 The percentages are computer-vision estimates. For best results, photograph one sheet against a contrasting background with even lighting and all four edges visible.
+
+To create a validated absolute move without connecting to the printer:
+
+```python
+from machine_control import coordinate_command
+
+print(coordinate_command(100, 50, 44))
+# G1 X100.00 Y50.00 Z44.00 F2400
+```
+
+Call `move_to_coordinate(100, 50, 44)` only after the printer is homed and the paper bottom-right is aligned with the machine origin; it sends the command and waits for the printer's `ok` response.

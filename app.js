@@ -18,8 +18,6 @@ function recommend(blank) {
 }
 
 function showResult(result) {
-  const preview = $('preview');
-  if (preview && result.sheet_image) { preview.src = result.sheet_image; preview.alt = 'Perspective-corrected scanned sheet'; preview.classList.remove('missing'); }
   latestResult = result; hasScan = true; setText('blankStat', `${result.blank}%`); setText('usableLegend', `${result.blank}%`); setText('printedStat', `${result.unusable ?? (100 - result.blank).toFixed(1)}%`); setText('damageStat', `${result.damage}%`); setText('confidence', `${result.confidence}% confidence · ${result.type}`);
   const meter = $('meterFill'); if (meter) meter.style.width = `${result.blank}%`;
   const planImage = document.querySelector('.cutting-plan-image');
@@ -29,16 +27,29 @@ function showResult(result) {
   setText('countSticky', counts.sticky); setText('countMiniSticky', counts.mini_sticky); setText('countMemo', counts.memo);
   setText('countScratch', counts.scratch); setText('countFlashcards', counts.flashcards);
   const gcodeButton = $('downloadGcode'); if (gcodeButton) gcodeButton.disabled = !(result.pieces && result.pieces.length);
+  const executeButton = $('executeGcode'); if (executeButton) executeButton.disabled = !(result.pieces && result.pieces.length);
   recommend(result.blank);
 }
 
 async function downloadGcode() {
   if (!latestResult || !latestResult.pieces?.length) return;
-  const response = await fetch('/api/cutting/gcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height }) });
+  const response = await fetch('/api/cutting/gcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_up_z_mm: 44, pen_down_z_mm: 41 } }) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return setText('confidence', `G-code failed: ${result.error || response.status}`);
   const blob = new Blob([result.gcode], { type: 'text/plain' });
   const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'repaper-cut-plan.gcode'; link.click(); URL.revokeObjectURL(link.href);
+}
+
+async function executeGcode() {
+  if (!latestResult?.pieces?.length) return;
+  const confirmed = window.confirm('This will home the printer, raise the blade to Z44, and execute the blade-cutting program from the paper bottom-right origin. Ensure the paper, blade, and work area are ready. Continue?');
+  if (!confirmed) return;
+  const log = $('machineLog'); if (log) log.textContent = 'Starting printer execution...';
+  setText('confidence', 'Sending homing and cutting commands to the printer...');
+  const response = await fetch('/api/cutting/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_up_z_mm: 44, pen_down_z_mm: 41 } }) });
+  const result = await response.json().catch(() => ({}));
+  if (log) log.textContent = (result.logs || [`ERROR: ${result.error || response.status}`]).join('\\n');
+  setText('confidence', response.ok ? `Printer completed ${result.sent_commands} commands.` : `Printer failed: ${result.error || response.status}`);
 }
 
 async function acceptFile(file) {
@@ -168,3 +179,4 @@ syncSettingsFromDashboard();
 updateDemandSummary();
 const printBtn = $('printBtn'); if (printBtn) printBtn.addEventListener('click', () => window.print());
 const gcodeButton = $('downloadGcode'); if (gcodeButton) gcodeButton.addEventListener('click', downloadGcode);
+const executeButton = $('executeGcode'); if (executeButton) executeButton.addEventListener('click', executeGcode);

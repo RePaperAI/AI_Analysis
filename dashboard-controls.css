@@ -2,3 +2,5 @@
 .scanner-controls{display:flex;align-items:center;gap:8px;margin:-4px 0 14px;padding:9px 10px;background:#f7fbf7;border:1px solid #e1e9e2;border-radius:8px}.scanner-controls .scan-trigger{margin:0}.scan-status{font-size:10px;color:#71807c;margin-left:auto}.scanner-controls button:disabled{opacity:.55;cursor:wait}.scanner-controls label{display:inline-block}
 .camera-panel{margin:-4px 0 14px;padding:10px;background:#17211d;border-radius:8px}.camera-panel video{display:block;width:100%;max-height:420px;object-fit:contain;background:#000;border-radius:5px}.camera-actions{display:flex;gap:8px;margin-top:9px}.camera-actions .scan-trigger{margin:0;background:#fff}.camera-panel[hidden]{display:none}
 .gcode-button{margin-top:12px;width:100%}.gcode-button:disabled{cursor:not-allowed}
+.execute-button{color:#a12d2d;border-color:#e5b5b5}.execute-button:hover{background:#fff1f1}
+.machine-log{margin:10px 0 0;min-height:54px;max-height:180px;overflow:auto;padding:9px;background:#17211d;color:#d8f5df;border-radius:6px;font:10px/1.45 Consolas,monospace;white-space:pre-wrap}
