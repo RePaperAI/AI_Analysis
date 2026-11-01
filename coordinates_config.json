@@ -23,8 +23,9 @@
   "tool": {
     "pen_up_z_mm": 44.0,
     "pen_down_z_mm": 41.0,
-    "travel_feed": 2400,
-    "cut_feed": 600,
+    "travel_feed": 18000,
+    "cut_feed": 18000,
+    "z_feed": 300,
     "passes": 1
   }
 }

@@ -32,8 +32,9 @@ class CutterConfig:
     blade_z_mm: float = 0.0
     pen_up_z_mm: float = 44.0
     pen_down_z_mm: float = 41.0
-    travel_feed: int = 2400
-    cut_feed: int = 600
+    travel_feed: int = 18000
+    cut_feed: int = 18000
+    z_feed: int = 300
     passes: int = 1
 
 
@@ -69,7 +70,8 @@ def load_cutter_config(path: str | Path | None = None) -> CutterConfig:
             pen_up_z_mm=float(tool["pen_up_z_mm"]),
             pen_down_z_mm=float(tool["pen_down_z_mm"]),
             travel_feed=int(tool.get("travel_feed", 2400)),
-            cut_feed=int(tool.get("cut_feed", 600)),
+            cut_feed=int(tool.get("cut_feed", 18000)),
+            z_feed=int(tool.get("z_feed", 300)),
             passes=int(tool.get("passes", 1)),
         )
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -168,7 +170,7 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
         "G90 ; absolute setup positioning",
         "G28 X Y ; home X and Y",
         "G28 Z ; home Z after X/Y",
-        "G1 Z44.00 F2400 ; pen up",
+        f"G1 Z{cfg.pen_up_z_mm:.2f} F{cfg.z_feed} ; pen up",
         "G91 ; relative cutting measurements from paper bottom-right (0,0)",
         "M5 ; blade/spindle off if supported",
         f"; Pen up height Z{cfg.pen_up_z_mm:.2f} mm; pen down height Z{cfg.pen_down_z_mm:.2f} mm",
@@ -201,12 +203,12 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
         for pass_number in range(1, cfg.passes + 1):
             lines.extend([
                 f"; pass {pass_number}",
-                cut_move("Z", cfg.pen_down_z_mm - cfg.pen_up_z_mm, cfg.cut_feed),
+                cut_move("Z", cfg.pen_down_z_mm - cfg.pen_up_z_mm, cfg.z_feed),
             ])
             for target_x, target_y in path[1:]:
                 lines.append(f"G1 X{target_x - current_x:+.2f} Y{target_y - current_y:+.2f} F{cfg.cut_feed}")
                 current_x, current_y = target_x, target_y
-        lines.append(cut_move("Z", cfg.pen_up_z_mm - cfg.pen_down_z_mm, cfg.travel_feed))
+        lines.append(cut_move("Z", cfg.pen_up_z_mm - cfg.pen_down_z_mm, cfg.z_feed))
     lines.extend([
         # Stay at the raised/safe Z height while returning to the start.
         f"G0 X{-current_x:+.2f} Y{-current_y:+.2f} F{cfg.travel_feed}",

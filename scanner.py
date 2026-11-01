@@ -153,7 +153,9 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     ink[:, [0, 1, -2, -1]] = 1
     # The cutting mask uses a wider clearance than the layout preview so faint
     # exam text and thin lines cannot be mistaken for blank paper.
-    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
+    # Use a generous clearance because blurred gray writing can be only a few
+    # pixels darker than the paper after perspective correction.
+    ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
     blank = (ink == 0).astype(np.uint8)
     integral = cv2.integral(blank)
     # The detected border is already part of the ink mask, so keep only a small
@@ -294,7 +296,9 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
                                           cv2.THRESH_BINARY_INV, 35, 10)
     # A phone photo can make blank paper gray. Only substantially dark pixels
     # count as printed content; brightness normalization handles shadows.
-    _, raw_ink = cv2.threshold(roi, 155, 255, cv2.THRESH_BINARY_INV)
+    # The raw threshold is intentionally conservative for cutting: gray text
+    # and pencil marks must count as obstructions even under bright lighting.
+    _, raw_ink = cv2.threshold(roi, 185, 255, cv2.THRESH_BINARY_INV)
     threshold = cv2.bitwise_or(adaptive_ink, raw_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
@@ -323,14 +327,17 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     quality = 100 - min(45, abs(lighting - 190) / 4)
     confidence = round(max(50, min(99, detection_confidence * 0.65 + quality * 0.35)))
     full_ink = np.zeros_like(gray, dtype=np.uint8)
-    _, plan_light_ink = cv2.threshold(normalized, 220, 255, cv2.THRESH_BINARY_INV)
-    plan_light_ink = cv2.morphologyEx(plan_light_ink, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    # Include faint, blurred writing that the normal threshold can miss. The
+    # later dilation turns these strokes into a no-cut safety zone.
+    _, plan_light_ink = cv2.threshold(normalized, 238, 255, cv2.THRESH_BINARY_INV)
+    plan_light_ink = cv2.morphologyEx(plan_light_ink, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+    plan_light_ink = cv2.morphologyEx(plan_light_ink, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     plan_threshold = cv2.bitwise_or(threshold, plan_light_ink)
     full_ink[margin_y:height - margin_y, margin_x:width - margin_x] = plan_threshold
     # Usable area is practical cuttable paper, not simply white pixels. Remove
     # a clearance around all detected ink and the outer sheet border first.
     safe_ink = cv2.dilate((full_ink > 0).astype(np.uint8),
-                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (23, 23)))
+                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
     safe_ink[[0, 1, -2, -1], :] = 1
     safe_ink[:, [0, 1, -2, -1]] = 1
     interior = safe_ink[margin_y:height - margin_y, margin_x:width - margin_x]
@@ -415,6 +422,7 @@ def cutting_gcode():
             pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
             travel_feed=int(config_data.get("travel_feed", base_config.travel_feed)),
             cut_feed=int(config_data.get("cut_feed", base_config.cut_feed)),
+            z_feed=int(config_data.get("z_feed", base_config.z_feed)),
             passes=int(config_data.get("passes", base_config.passes)),
         )
         gcode = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
@@ -454,6 +462,9 @@ def execute_cutting_gcode():
             max_y_mm=float(config_data.get("max_y_mm", base_config.max_y_mm)),
             pen_up_z_mm=float(config_data.get("pen_up_z_mm", base_config.pen_up_z_mm)),
             pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
+            travel_feed=base_config.travel_feed,
+            cut_feed=base_config.cut_feed,
+            z_feed=base_config.z_feed,
         )
         program = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
         sent, logs = execute_gcode(program)

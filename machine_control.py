@@ -29,7 +29,7 @@ def home_printer(port: str = PRINTER_PORT, baud: int = PRINTER_BAUD,
         _send_and_wait(printer, "G90", logs)
         _send_and_wait(printer, "G28 X Y", logs)
         _send_and_wait(printer, "G28 Z", logs)
-        _send_and_wait(printer, f"G1 Z{cfg.pen_up_z_mm:.2f} F{cfg.travel_feed}", logs)
+        _send_and_wait(printer, f"G1 Z{cfg.pen_up_z_mm:.2f} F{cfg.z_feed}", logs)
     logs.append("Homing completed; tool is up")
     for entry in logs:
         print(entry, flush=True)
@@ -55,8 +55,8 @@ def prepare_camera_position(port: str = PRINTER_PORT, baud: int = PRINTER_BAUD,
         _send_and_wait(printer, "G90", logs)
         _send_and_wait(printer, "G28 X Y", logs)
         _send_and_wait(printer, "G28 Z", logs)
-        _send_and_wait(printer, "G1 Z50.00 F2400", logs)
-        _send_and_wait(printer, "G1 Y280.00 F2400", logs)
+        _send_and_wait(printer, f"G1 Z50.00 F{cfg.z_feed}", logs)
+        _send_and_wait(printer, f"G1 Y280.00 F{cfg.travel_feed}", logs)
         _send_and_wait(printer, "M400", logs)
     logs.append("Camera position ready: Z50, Y280")
     for entry in logs:
