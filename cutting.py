@@ -25,6 +25,8 @@ class CutterConfig:
     bottom_right_y_mm: float = 263.0
     bottom_left_x_mm: float = 302.0
     bottom_left_y_mm: float = 263.0
+    post_marking_x_mm: float = 0.0
+    post_marking_y_mm: float = 280.0
     # Printer travel limits.
     max_x_mm: float = 310.0
     max_y_mm: float = 300.0
@@ -67,6 +69,8 @@ def load_cutter_config(path: str | Path | None = None) -> CutterConfig:
             bottom_left_y_mm=float(paper["machine_corners_mm"]["bottom_left"]["y"]),
             max_x_mm=float(printer["max_x_mm"]),
             max_y_mm=float(printer["max_y_mm"]),
+            post_marking_x_mm=float(printer["post_marking_position_mm"]["x"]),
+            post_marking_y_mm=float(printer["post_marking_position_mm"]["y"]),
             pen_up_z_mm=float(tool["pen_up_z_mm"]),
             pen_down_z_mm=float(tool["pen_down_z_mm"]),
             travel_feed=int(tool.get("travel_feed", 2400)),
@@ -139,6 +143,8 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
         raise ValueError("A4 paper exceeds the printer X travel limit")
     if cfg.origin_y_mm + cfg.paper_height_mm > cfg.max_y_mm:
         raise ValueError("A4 paper exceeds the printer Y travel limit")
+    if not (0 <= cfg.post_marking_x_mm <= cfg.max_x_mm and 0 <= cfg.post_marking_y_mm <= cfg.max_y_mm):
+        raise ValueError("Post-marking position exceeds printer travel limits")
 
     source_pieces = list(pieces)
     rectangles = [_validate_piece(piece, image_width, image_height) for piece in source_pieces]
@@ -210,8 +216,9 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
                 current_x, current_y = target_x, target_y
         lines.append(cut_move("Z", cfg.pen_up_z_mm - cfg.pen_down_z_mm, cfg.z_feed))
     lines.extend([
-        # Stay at the raised/safe Z height while returning to the start.
-        f"G0 X{-current_x:+.2f} Y{-current_y:+.2f} F{cfg.travel_feed}",
+        "; Finish at X home and Y camera position without another Z command",
+        "G90 ; absolute positioning for post-marking parking move",
+        f"G1 X{cfg.post_marking_x_mm:.2f} Y{cfg.post_marking_y_mm:.2f} F{cfg.travel_feed}",
         "; End of plan",
         "M5",
     ])

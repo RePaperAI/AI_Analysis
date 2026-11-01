@@ -18,7 +18,8 @@
   "printer": {
     "max_x_mm": 310.0,
     "max_y_mm": 300.0,
-    "home_order": ["X", "Y", "Z"]
+    "home_order": ["X", "Y", "Z"],
+    "post_marking_position_mm": {"x": 0.0, "y": 280.0}
   },
   "tool": {
     "pen_up_z_mm": 44.0,
