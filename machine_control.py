@@ -36,6 +36,34 @@ def home_printer(port: str = PRINTER_PORT, baud: int = PRINTER_BAUD,
     return 4, logs
 
 
+def prepare_camera_position(port: str = PRINTER_PORT, baud: int = PRINTER_BAUD,
+                            config: CutterConfig | None = None) -> tuple[int, list[str]]:
+    """Home the printer, raise Z to 50 mm, then move Y to 280 mm for scanning."""
+    cfg = config or load_cutter_config()
+    if 50.0 <= 0 or 280.0 > cfg.max_y_mm:
+        raise ValueError("The configured camera position is outside printer travel")
+    try:
+        import serial
+    except ImportError as exc:
+        raise RuntimeError("Camera-position automation requires pyserial. Run: python -m pip install pyserial") from exc
+
+    logs = [f"Connecting to {port} at {baud} baud", "Automation: home X/Y, home Z, move Z50, then Y280"]
+    with serial.Serial(port, baud, timeout=1) as printer:
+        logs.append("Connected; waiting for printer USB reset")
+        time.sleep(3)
+        printer.reset_input_buffer()
+        _send_and_wait(printer, "G90", logs)
+        _send_and_wait(printer, "G28 X Y", logs)
+        _send_and_wait(printer, "G28 Z", logs)
+        _send_and_wait(printer, "G1 Z50.00 F2400", logs)
+        _send_and_wait(printer, "G1 Y280.00 F2400", logs)
+        _send_and_wait(printer, "M400", logs)
+    logs.append("Camera position ready: Z50, Y280")
+    for entry in logs:
+        print(entry, flush=True)
+    return 5, logs
+
+
 def coordinate_command(x_mm: float, y_mm: float, z_mm: float | None = None,
                       config: CutterConfig | None = None) -> str:
     """Build a safe absolute move for paper coordinates.

@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory
 from cutting import CutterConfig, generate_gcode, load_cutter_config
-from machine_control import execute_gcode
+from machine_control import execute_gcode, prepare_camera_position
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "pieces_config.json"
@@ -421,6 +421,17 @@ def cutting_gcode():
         return jsonify(gcode=gcode, piece_count=len(payload.get("pieces", [])))
     except (KeyError, TypeError, ValueError) as exc:
         return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/automation/prepare-scan")
+def prepare_scan():
+    """Home the printer and move it to the configured camera position."""
+    try:
+        sent, logs = prepare_camera_position()
+        return jsonify(sent_commands=sent, status="camera_ready", logs=logs)
+    except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
+        app.logger.exception("Scan preparation failed")
+        return jsonify(error=str(exc), logs=[f"ERROR: {exc}"]), 422
 
 
 @app.post("/api/cutting/execute")

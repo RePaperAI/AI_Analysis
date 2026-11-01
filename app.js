@@ -98,6 +98,25 @@ async function openCamera() {
     stopCamera();
   }
 }
+async function automateScan() {
+  const button = $('automateScanButton');
+  if (button) button.disabled = true;
+  setText('confidence', 'Homing printer and moving to camera position...');
+  try {
+    const response = await fetch('/api/automation/prepare-scan', { method: 'POST' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Printer preparation failed');
+    const log = $('machineLog');
+    if (log) log.textContent = (result.logs || []).join('\\n');
+    await openCamera();
+    setText('confidence', 'Camera ready. Capturing paper in 2 seconds...');
+    window.setTimeout(captureCameraFrame, 2000);
+  } catch (error) {
+    setText('confidence', `Automation failed: ${error.message || error}`);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
 function captureCameraFrame() {
   const video = $('cameraPreview'); const canvas = $('cameraCanvas');
   if (!video || !canvas || !video.videoWidth) return setText('confidence', 'Camera is not ready yet.');
@@ -112,6 +131,7 @@ if (fileInput) fileInput.addEventListener('change', event => acceptFile(event.ta
 const dropzone = $('dropzone'); if (dropzone) { dropzone.addEventListener('dragover', event => { event.preventDefault(); dropzone.classList.add('dragging'); }); dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging')); dropzone.addEventListener('drop', event => { event.preventDefault(); dropzone.classList.remove('dragging'); acceptFile(event.dataTransfer.files[0]); }); }
 const sampleBtn = $('sampleBtn'); if (sampleBtn) sampleBtn.addEventListener('click', async () => { const response = await fetch('Assets/Sample_Worksheet.png'); const blob = await response.blob(); acceptFile(new File([blob], 'sample.png', { type: 'image/png' })); });
 const cameraButton = $('cameraButton'); if (cameraButton) cameraButton.addEventListener('click', openCamera);
+const automateScanButton = $('automateScanButton'); if (automateScanButton) automateScanButton.addEventListener('click', automateScan);
 const captureButton = $('captureButton'); if (captureButton) captureButton.addEventListener('click', captureCameraFrame);
 const closeCameraButton = $('closeCameraButton'); if (closeCameraButton) closeCameraButton.addEventListener('click', stopCamera);
 function updateDemandSummary() {
