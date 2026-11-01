@@ -160,8 +160,10 @@ def _send_and_wait(printer, command: str, logs: list[str], timeout: float = 20.0
     raise TimeoutError(f"Printer did not acknowledge: {command}")
 
 
-def execute_gcode(program: str, port: str = PRINTER_PORT, baud: int = PRINTER_BAUD) -> tuple[int, list[str]]:
-    """Send a generated program line-by-line and wait for every acknowledgement."""
+def execute_gcode(program: str, port: str = PRINTER_PORT, baud: int = PRINTER_BAUD,
+                  home_before_cut: bool = False,
+                  config: CutterConfig | None = None) -> tuple[int, list[str]]:
+    """Send a generated program, optionally homing immediately before cutting."""
     try:
         import serial
     except ImportError as exc:
@@ -175,6 +177,11 @@ def execute_gcode(program: str, port: str = PRINTER_PORT, baud: int = PRINTER_BA
         logs.append("Connected; waiting for printer startup")
         time.sleep(3)
         printer.reset_input_buffer()
+        if home_before_cut:
+            cfg = config or load_cutter_config()
+            logs.append("Cutting startup: homing X/Y, then Z")
+            for command in ("G90", "G28 X Y", "G28 Z", f"G1 Z{cfg.pen_up_z_mm:.2f} F{cfg.z_feed}"):
+                _send_and_wait(printer, command, logs)
         for command in commands:
             _send_and_wait(printer, command, logs)
     logs.append(f"Completed {len(commands)} commands")

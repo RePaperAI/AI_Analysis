@@ -471,7 +471,7 @@ def execute_cutting_gcode():
             z_feed=base_config.z_feed,
         )
         program = generate_gcode(payload.get("pieces", []), payload["image_width"], payload["image_height"], config)
-        sent, logs = execute_gcode(program)
+        sent, logs = execute_gcode(program, home_before_cut=True, config=config)
         return jsonify(sent_commands=sent, status="completed", logs=logs)
     except (KeyError, TypeError, ValueError, OSError, RuntimeError, TimeoutError) as exc:
         app.logger.exception("Printer execution failed")

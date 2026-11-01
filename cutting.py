@@ -1,7 +1,7 @@
 """Generate safe, machine-space G-code for a blade-equipped 3D printer.
 
-The module only generates or explicitly sends G-code when called. It never
-homes or moves a printer automatically from the dashboard.
+The module only generates or explicitly sends G-code when called. Generated
+cutting files assume the printer has already been homed and aligned.
 """
 from __future__ import annotations
 
@@ -121,8 +121,8 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
         paper bottom-right = (5, 263)
 
     X increases toward the paper's left and Y increases toward the paper's
-    bottom. The generated file uses relative moves after homing, with home
-    position (0,0) as the machine base.
+    bottom. The generated file uses relative moves after the already-completed
+    homing step, with home position (0,0) as the machine base.
     """
     cfg = config or load_cutter_config()
     image_width = _number(image_width, "image_width")
@@ -170,17 +170,16 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
 
     lines = [
         "; RePaper AI blade cutting plan",
-        "; Startup: home X/Y, home Z, raise pen; paper bottom-right is the origin",
+        "; Startup: printer is already positioned at the configured paper origin",
+        "; No homing commands are included in this cutting file",
         "; Review paper placement, blade depth, and feed rates before running",
         "G21 ; millimetres",
         "G90 ; absolute setup positioning",
-        "G28 X Y ; home X and Y",
-        "G28 Z ; home Z after X/Y",
         f"G1 Z{cfg.pen_up_z_mm:.2f} F{cfg.z_feed} ; pen up",
         "G91 ; relative cutting measurements from paper bottom-right (0,0)",
         "M5 ; blade/spindle off if supported",
         f"; Pen up height Z{cfg.pen_up_z_mm:.2f} mm; pen down height Z{cfg.pen_down_z_mm:.2f} mm",
-        "; Homing must place the paper bottom-right at the machine position (0,0)",
+        "; The printer must already be homed and aligned before execution",
     ]
     current_x = 0.0
     current_y = 0.0

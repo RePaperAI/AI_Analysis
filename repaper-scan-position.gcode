@@ -1,12 +1,11 @@
 ; RePaper AI camera-position setup
-; This file prepares the printer for the USB-camera scan.
+; This file is not executed automatically by the scanner.
 ; Camera capture is performed by the dashboard, not by G-code.
-; Coordinates are absolute machine coordinates from the homed position.
+; Camera capture is handled only by the dashboard.
 
 G21 ; millimetres
 G90 ; absolute positioning
-G28 X Y ; home X and Y first
-G28 Z ; home Z after X and Y
+; Printer must already be homed before this file is used.
 G1 Z50.00 F300 ; raise tool for camera clearance
 G1 Y280.00 F18000 ; move to camera position at maximum XY speed
 M400 ; wait until all printer movement is complete

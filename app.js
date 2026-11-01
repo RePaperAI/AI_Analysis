@@ -42,7 +42,7 @@ async function downloadGcode() {
 
 async function executeGcode() {
   if (!latestResult?.pieces?.length) return;
-  const confirmed = window.confirm('This will home the printer, raise the blade to Z44, and execute the blade-cutting program from the paper bottom-right origin. Ensure the paper, blade, and work area are ready. Continue?');
+  const confirmed = window.confirm('This will home X/Y, then Z, raise the blade to Z44, and execute the cutting program. Ensure the paper, blade, and work area are ready. Continue?');
   if (!confirmed) return;
   const log = $('machineLog'); if (log) log.textContent = 'Starting printer execution...';
   setText('confidence', 'Sending homing and cutting commands to the printer...');
@@ -101,13 +101,8 @@ async function openCamera() {
 async function automateScan() {
   const button = $('automateScanButton');
   if (button) button.disabled = true;
-  setText('confidence', 'Homing printer and moving to camera position...');
+  setText('confidence', 'Opening USB camera...');
   try {
-    const response = await fetch('/api/automation/prepare-scan', { method: 'POST' });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || 'Printer preparation failed');
-    const log = $('machineLog');
-    if (log) log.textContent = (result.logs || []).join('\\n');
     await openCamera();
     setText('confidence', 'Camera ready. Capturing paper in 2 seconds...');
     window.setTimeout(captureCameraFrame, 2000);
