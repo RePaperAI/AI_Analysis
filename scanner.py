@@ -63,6 +63,40 @@ def _target_dimensions(width: float, height: float, portrait: bool | None = None
     return target_width, target_height
 
 
+A4_RATIO = 297.0 / 210.0
+
+
+def _detect_a4_quad(image: np.ndarray) -> tuple[np.ndarray, float] | None:
+    """Find the A4 sheet as the largest bright, colourless region.
+
+    Paper is bright and almost unsaturated, unlike a gold board, a coloured
+    cloth, or a dark frame. A large opening removes thin bridges to bright
+    background, and the region is accepted only if it has an A4 shape.
+    Returns the four ordered corners and a confidence, or None.
+    """
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    paper = ((hsv[..., 1] < 40) & (hsv[..., 2] > 115)).astype(np.uint8) * 255
+    paper = cv2.morphologyEx(paper, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
+    kernel = int(max(image.shape[:2]) * 0.043) | 1
+    paper = cv2.morphologyEx(paper, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, kernel)))
+    contours, _ = cv2.findContours(paper, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    contour = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(contour)
+    rect = cv2.minAreaRect(contour)
+    rect_w, rect_h = rect[1]
+    if min(rect_w, rect_h) < 100 or area < image.shape[0] * image.shape[1] * 0.25:
+        return None
+    ratio = max(rect_w, rect_h) / min(rect_w, rect_h)
+    fill = area / (rect_w * rect_h)
+    # Clips, shadows and one-sided photo perspective bend the ratio a little.
+    if abs(ratio - A4_RATIO) / A4_RATIO > 0.12 or fill < 0.85:
+        return None
+    confidence = min(97.0, 80 + fill * 12 + (1 - abs(ratio - A4_RATIO) / A4_RATIO) * 5)
+    return _order_points(cv2.boxPoints(rect)), confidence
+
+
 def _flatten_sheet(image: np.ndarray, portrait_hint: bool | None = None) -> tuple[np.ndarray, float]:
     """Return a top-down sheet image and a confidence score for its detection."""
     height, width = image.shape[:2]
@@ -70,6 +104,18 @@ def _flatten_sheet(image: np.ndarray, portrait_hint: bool | None = None) -> tupl
     small = cv2.resize(image, None, fx=scale, fy=scale) if scale < 1 else image.copy()
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     image_area = small.shape[0] * small.shape[1]
+
+    # Preferred path: the input is always an A4 sheet, so crop exactly to it and
+    # discard the board, cloth, clips and other surroundings.
+    detected = _detect_a4_quad(small)
+    if detected is not None:
+        quad, confidence = detected
+        w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
+        h = int(max(np.linalg.norm(quad[1] - quad[2]), np.linalg.norm(quad[0] - quad[3])))
+        target_w, target_h = _target_dimensions(w, h)
+        destination = np.array([[0, 0], [target_w - 1, 0], [target_w - 1, target_h - 1], [0, target_h - 1]], dtype="float32")
+        matrix = cv2.getPerspectiveTransform(quad, destination)
+        return cv2.warpPerspective(small, matrix, (target_w, target_h)), confidence
 
     if width > height:
         bright_cutoff = max(105, int(np.percentile(gray, 58)))
@@ -157,87 +203,85 @@ def _make_cutting_plan(sheet: np.ndarray, threshold: np.ndarray, demand: dict) -
     # pixels darker than the paper after perspective correction.
     ink = cv2.dilate(ink, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31)))
     blank = (ink == 0).astype(np.uint8)
-    integral = cv2.integral(blank)
     # The detected border is already part of the ink mask, so keep only a small
     # outer search margin and preserve more usable paper near the edges.
     # Keep only a small outer search margin. Detected dark objects, including
     # scissors, clips, and tape, are handled by the ink/obstruction mask itself.
     margin_x, margin_y = int(width * .02), int(height * .02)
 
-    def blank_ratio(x: int, y: int, w: int, h: int) -> float:
-        total = integral[y + h, x + w] - integral[y, x + w] - integral[y + h, x] + integral[y, x]
-        return float(total) / max(1, w * h)
-
     demand_values = {key: max(0.0, float(demand.get(key, 0))) for key in products}
     if not any(demand_values.values()):
         demand_values["sticky"] = 1
-    # Generate safe candidate rectangles for every demanded product and both
-    # orientations. A candidate is accepted only when its complete interior is
-    # blank after the ink safety dilation.
-    candidates = []
+    # Pack greedily on an exact grid of fully blank positions. Every position
+    # where a product (in either orientation) is completely clear after the ink
+    # dilation is considered, so no usable gap is skipped. The most valuable
+    # product is placed first and the blank map is updated after each piece.
+    # Several packing corners are tried and the layout with the most value wins.
+    paper_width_mm, paper_height_mm = (297.0, 210.0) if width > height else (210.0, 297.0)
+    px_per_mm = min(width / paper_width_mm, height / paper_height_mm)
+    step = 4
+    shapes = []
     for product_key, demand_value in demand_values.items():
         if demand_value <= 0:
             continue
         label, mm_w, mm_h, _ = products[product_key]
-        # Match the physical A4 orientation to the detected sheet orientation.
-        paper_width_mm, paper_height_mm = (297.0, 210.0) if width > height else (210.0, 297.0)
-        px_per_mm = min(width / paper_width_mm, height / paper_height_mm)
-        orientations = {(mm_w, mm_h), (mm_h, mm_w)}
-        for physical_w, physical_h in orientations:
+        for physical_w, physical_h in {(mm_w, mm_h), (mm_h, mm_w)}:
             piece_w, piece_h = max(32, int(physical_w * px_per_mm)), max(32, int(physical_h * px_per_mm))
-            for y in range(margin_y, height - margin_y - piece_h + 1, 6):
-                for x in range(margin_x, width - margin_x - piece_w + 1, 6):
-                    ratio = blank_ratio(x, y, piece_w, piece_h)
-                    # A cut rectangle must be completely clear after dilation;
-                    # allowing even a small ink fraction can place mini pieces
-                    # over text, barcodes, or answer boxes.
-                    if ratio >= 0.99999:
-                        area = piece_w * piece_h
-                        # Demand is a preference, while area recovery is the main
-                        # objective. This lets smaller products fill leftover gaps.
-                        value = area * (0.45 + 0.55 * demand_value / 100.0)
-                        candidates.append({"x": x, "y": y, "width": piece_w, "height": piece_h,
-                                           "label": label, "product": product_key,
-                                           "width_mm": float(physical_w), "height_mm": float(physical_h),
-                                           "size_mm": f"{physical_w} x {physical_h} mm",
-                                           "size_in": f"{physical_w / 25.4:g} x {physical_h / 25.4:g} in",
-                                           "value": value})
+            value = piece_w * piece_h * (0.45 + 0.55 * demand_value / 100.0)
+            shapes.append({"product": product_key, "label": label, "width": piece_w, "height": piece_h,
+                           "width_mm": float(physical_w), "height_mm": float(physical_h),
+                           "size_mm": f"{physical_w} x {physical_h} mm",
+                           "size_in": f"{physical_w / 25.4:g} x {physical_h / 25.4:g} in",
+                           "value": value})
 
-    # Keep spatially diverse candidates so optimization remains fast and does not
-    # overfit to hundreds of nearly identical origins in one blank region.
-    diverse = {}
-    for candidate in candidates:
-        key = (candidate["product"], candidate["x"] // 48, candidate["y"] // 48,
-               candidate["width"], candidate["height"])
-        if key not in diverse or candidate["value"] > diverse[key]["value"]:
-            diverse[key] = candidate
-    # Preserve a useful candidate set for every product; otherwise a large
-    # scratch/memo rectangle could crowd all smaller sticky-note candidates out
-    # before the optimizer gets a chance to combine them.
-    grouped = {}
-    for candidate in diverse.values():
-        grouped.setdefault(candidate["product"], []).append(candidate)
-    candidates = []
-    for group in grouped.values():
-        candidates.extend(sorted(group, key=lambda item: item["value"], reverse=True)[:250])
-    candidates = sorted(candidates, key=lambda item: item["value"], reverse=True)[:900]
+    def clear_positions(integral_map: np.ndarray, shape: dict) -> tuple[np.ndarray, np.ndarray]:
+        w, h = shape["width"], shape["height"]
+        ys = np.arange(margin_y, height - margin_y - h + 1, step)
+        xs = np.arange(margin_x, width - margin_x - w + 1, step)
+        if not len(ys) or not len(xs):
+            return np.empty(0, int), np.empty(0, int)
+        y0, x0 = ys[:, None], xs[None, :]
+        total = (integral_map[y0 + h, x0 + w] - integral_map[y0, x0 + w]
+                 - integral_map[y0 + h, x0] + integral_map[y0, x0])
+        yy, xx = np.nonzero(total == w * h)
+        return ys[yy], xs[xx]
 
-    def overlaps(a: dict, b: dict) -> bool:
-        return not (a["x"] + a["width"] <= b["x"] or b["x"] + b["width"] <= a["x"] or
-                    a["y"] + a["height"] <= b["y"] or b["y"] + b["height"] <= a["y"])
+    # Each rule scores a position; the lowest tuple wins, which packs pieces
+    # tightly against a chosen corner of the free area.
+    corner_rules = [
+        lambda x, y, w, h: (y, x), lambda x, y, w, h: (x, y),
+        lambda x, y, w, h: (-(y + h), x), lambda x, y, w, h: (-(y + h), -(x + w)),
+        lambda x, y, w, h: (y, -(x + w)), lambda x, y, w, h: (-(x + w), y),
+    ]
 
-    # Beam search chooses a globally better combination than greedy placement.
-    # Each state is (score, selected pieces); overlap-free states survive pruning.
-    beam = [(0.0, [])]
-    for candidate in candidates:
-        expanded = list(beam)
-        for score, selected in beam:
-            if len(selected) >= 20 or any(overlaps(candidate, piece) for piece in selected):
-                continue
-            expanded.append((score + candidate["value"], selected + [candidate]))
-        expanded.sort(key=lambda state: state[0], reverse=True)
-        beam = expanded[:180]
-    pieces = beam[0][1] if beam else []
+    def pack(rule) -> tuple[float, list[dict]]:
+        free = blank.copy()
+        chosen, total_value = [], 0.0
+        while len(chosen) < 20:
+            integral_map = cv2.integral(free)
+            best = None
+            for shape in shapes:
+                ys, xs = clear_positions(integral_map, shape)
+                if not len(ys):
+                    continue
+                w, h = shape["width"], shape["height"]
+                # Break ties by the corner rule; evaluate only a bounded sample.
+                keys = [rule(int(x), int(y), w, h) for y, x in zip(ys, xs)]
+                index = min(range(len(keys)), key=keys.__getitem__)
+                rank = (-shape["value"], keys[index])
+                if best is None or rank < best[0]:
+                    best = (rank, shape, int(xs[index]), int(ys[index]))
+            if best is None:
+                break
+            _, shape, x, y = best
+            chosen.append({**shape, "x": x, "y": y})
+            total_value += shape["value"]
+            free[y:y + shape["height"], x:x + shape["width"]] = 0
+        return total_value, chosen
+
+    pieces = []
+    if shapes:
+        pieces = max((pack(rule) for rule in corner_rules), key=lambda result: result[0])[1]
 
     # Recreate the reference treatment: solid coral paper with original
     # worksheet marks preserved as darker coral instead of washed-out pink.
@@ -296,7 +340,12 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
 
     # Normalize uneven lighting before thresholding. This reduces false ink caused
     # by camera shadows while preserving faint gray worksheet text.
-    background = cv2.GaussianBlur(roi, (0, 0), 21)
+    # A large closing keeps the paper brightness and drops thin dark text, so
+    # text and box lines do not darken the background estimate; the blur then
+    # smooths the result. This follows shadow edges better than blurring alone.
+    closing_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41))
+    background = cv2.GaussianBlur(cv2.morphologyEx(roi, cv2.MORPH_CLOSE, closing_kernel), (0, 0), 15)
+    background = np.maximum(background, 1)
     normalized = cv2.divide(roi, background, scale=255)
     adaptive_ink = cv2.adaptiveThreshold(normalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                           cv2.THRESH_BINARY_INV, 35, 10)
@@ -304,7 +353,9 @@ def analyze_sheet(image: np.ndarray, demand: dict | None = None) -> dict:
     # count as printed content; brightness normalization handles shadows.
     # The raw threshold is intentionally conservative for cutting: gray text
     # and pencil marks must count as obstructions even under bright lighting.
-    _, raw_ink = cv2.threshold(roi, 185, 255, cv2.THRESH_BINARY_INV)
+    # Threshold the illumination-normalized image: a fixed cutoff on raw gray
+    # classifies a whole camera shadow as ink and hides large blank regions.
+    _, raw_ink = cv2.threshold(normalized, 205, 255, cv2.THRESH_BINARY_INV)
     threshold = cv2.bitwise_or(adaptive_ink, raw_ink)
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
     threshold = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
@@ -426,7 +477,6 @@ def cutting_gcode():
             max_y_mm=float(config_data.get("max_y_mm", base_config.max_y_mm)),
             safe_z_mm=float(config_data.get("safe_z_mm", 5.0)),
             blade_z_mm=float(config_data.get("blade_z_mm", 0.0)),
-            pen_up_z_mm=float(config_data.get("pen_up_z_mm", base_config.pen_up_z_mm)),
             pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
             travel_feed=int(config_data.get("travel_feed", base_config.travel_feed)),
             cut_feed=int(config_data.get("cut_feed", base_config.cut_feed)),
@@ -470,7 +520,6 @@ def execute_cutting_gcode():
             post_marking_y_mm=base_config.post_marking_y_mm,
             max_x_mm=float(config_data.get("max_x_mm", base_config.max_x_mm)),
             max_y_mm=float(config_data.get("max_y_mm", base_config.max_y_mm)),
-            pen_up_z_mm=float(config_data.get("pen_up_z_mm", base_config.pen_up_z_mm)),
             pen_down_z_mm=float(config_data.get("pen_down_z_mm", base_config.pen_down_z_mm)),
             travel_feed=base_config.travel_feed,
             cut_feed=base_config.cut_feed,

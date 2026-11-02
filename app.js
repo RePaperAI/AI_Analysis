@@ -40,7 +40,7 @@ function showResult(result) {
 
 async function downloadGcode() {
   if (!latestResult || !latestResult.pieces?.length) return;
-  const response = await fetch('/api/cutting/gcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_up_z_mm: 44, pen_down_z_mm: 41 } }) });
+  const response = await fetch('/api/cutting/gcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_down_z_mm: 41 } }) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) return setText('confidence', `G-code failed: ${result.error || response.status}`);
   const blob = new Blob([result.gcode], { type: 'text/plain' });
@@ -53,7 +53,7 @@ async function executeGcode() {
   if (!confirmed) return;
   const log = $('machineLog'); if (log) log.textContent = 'Starting printer execution...';
   setText('confidence', 'Sending homing and cutting commands to the printer...');
-  const response = await fetch('/api/cutting/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_up_z_mm: 44, pen_down_z_mm: 41 } }) });
+  const response = await fetch('/api/cutting/execute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pieces: latestResult.pieces, image_width: latestResult.width, image_height: latestResult.height, config: { paper_width_mm: latestResult.paper_width_mm, paper_height_mm: latestResult.paper_height_mm, max_x_mm: 310, max_y_mm: 300, pen_down_z_mm: 41 } }) });
   const result = await response.json().catch(() => ({}));
   if (log) log.textContent = (result.logs || [`ERROR: ${result.error || response.status}`]).join('\\n');
   setText('confidence', response.ok ? `Printer completed ${result.sent_commands} commands.` : `Printer failed: ${result.error || response.status}`);

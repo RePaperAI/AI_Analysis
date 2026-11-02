@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Iterable
 
 
+# Pen-up height is always this far above the pen-down height.
+PEN_UP_CLEARANCE_MM = 5.0
+
+
 @dataclass(frozen=True)
 class CutterConfig:
     # Current sheet: landscape A4, 297 x 210 mm.
@@ -32,12 +36,15 @@ class CutterConfig:
     max_y_mm: float = 300.0
     safe_z_mm: float = 5.0
     blade_z_mm: float = 0.0
-    pen_up_z_mm: float = 44.0
     pen_down_z_mm: float = 41.0
     travel_feed: int = 18000
     cut_feed: int = 18000
     z_feed: int = 300
     passes: int = 1
+
+    @property
+    def pen_up_z_mm(self) -> float:
+        return self.pen_down_z_mm + PEN_UP_CLEARANCE_MM
 
 
 COORDINATES_CONFIG_PATH = Path(__file__).with_name("coordinates_config.json")
@@ -71,7 +78,6 @@ def load_cutter_config(path: str | Path | None = None) -> CutterConfig:
             max_y_mm=float(printer["max_y_mm"]),
             post_marking_x_mm=float(printer["post_marking_position_mm"]["x"]),
             post_marking_y_mm=float(printer["post_marking_position_mm"]["y"]),
-            pen_up_z_mm=float(tool["pen_up_z_mm"]),
             pen_down_z_mm=float(tool["pen_down_z_mm"]),
             travel_feed=int(tool.get("travel_feed", 2400)),
             cut_feed=int(tool.get("cut_feed", 18000)),
@@ -131,8 +137,6 @@ def generate_gcode(pieces: Iterable[dict], image_width: float, image_height: flo
         raise ValueError("Scanned sheet dimensions must be positive")
     if cfg.passes < 1:
         raise ValueError("passes must be at least 1")
-    if cfg.pen_down_z_mm >= cfg.pen_up_z_mm:
-        raise ValueError("Pen-down Z must be lower than pen-up Z")
     if cfg.paper_width_mm <= 0 or cfg.paper_height_mm <= 0:
         raise ValueError("Paper dimensions must be positive")
     if cfg.origin_x_mm < 0 or cfg.origin_y_mm < 0:

@@ -22,8 +22,7 @@
     "post_marking_position_mm": {"x": 0.0, "y": 280.0}
   },
   "tool": {
-    "pen_up_z_mm": 44.0,
-    "pen_down_z_mm": 41.0,
+    "pen_down_z_mm": 44.0,
     "travel_feed": 18000,
     "cut_feed": 18000,
     "z_feed": 300,
