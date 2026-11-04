@@ -7,6 +7,7 @@ regions. It is a useful first pass, not an OCR or forensic paper-grading model.
 from __future__ import annotations
 
 import base64
+import itertools
 import json
 from pathlib import Path
 
@@ -66,35 +67,119 @@ def _target_dimensions(width: float, height: float, portrait: bool | None = None
 A4_RATIO = 297.0 / 210.0
 
 
+def _hull_corners(contour: np.ndarray) -> np.ndarray:
+    hull = cv2.convexHull(contour).reshape(-1, 2).astype("float32")
+    sums = hull.sum(axis=1)
+    diffs = hull[:, 1] - hull[:, 0]
+    return np.array([hull[np.argmin(sums)], hull[np.argmin(diffs)],
+                     hull[np.argmax(sums)], hull[np.argmax(diffs)]], dtype="float32")
+
+
+def _magnet_quad_from_circles(circles: np.ndarray, image_area: float) -> tuple[np.ndarray, float] | None:
+    """Pick the four circles that form an A4-shaped quad; infer a missing fourth."""
+    def a4_error(quad: np.ndarray) -> float:
+        quad = _order_points(quad)
+        sides = [np.linalg.norm(quad[i] - quad[(i + 1) % 4]) for i in range(4)]
+        long_side, short_side = (sides[0] + sides[2]) / 2, (sides[1] + sides[3]) / 2
+        if min(long_side, short_side) < 1:
+            return 9.0
+        return abs(max(long_side, short_side) / min(long_side, short_side) - A4_RATIO) / A4_RATIO
+
+    best = None
+    centres = circles[:8, :2].astype("float32")
+    radii = circles[:8, 2]
+    for combo in itertools.combinations(range(len(centres)), 4):
+        pts = centres[list(combo)]
+        r = radii[list(combo)]
+        hull = cv2.convexHull(pts)
+        if len(hull) != 4 or r.max() > 1.6 * r.min() or cv2.contourArea(hull) < image_area * 0.25:
+            continue
+        error = a4_error(pts)
+        if error < 0.15 and (best is None or error < best[0]):
+            best = (error, _order_points(pts), float(r.mean()))
+    if best is None:
+        # Three magnets visible: complete the parallelogram around each vertex.
+        for combo in itertools.combinations(range(len(centres)), 3):
+            r = radii[list(combo)]
+            if r.max() > 1.6 * r.min():
+                continue
+            for mid in range(3):
+                corner = centres[combo[mid]]
+                others = [centres[combo[i]] for i in range(3) if i != mid]
+                fourth = others[0] + others[1] - corner
+                pts = np.array([corner, others[0], fourth, others[1]], dtype="float32")
+                if cv2.contourArea(cv2.convexHull(pts)) < image_area * 0.25:
+                    continue
+                error = a4_error(pts)
+                if error < 0.12 and (best is None or error < best[0]):
+                    best = (error, _order_points(pts), float(r.mean()))
+    if best is None:
+        return None
+    error, quad, radius = best
+    # Magnet centres sit just inside the sheet corners; push outward by about a radius.
+    centre = quad.mean(axis=0)
+    direction = quad - centre
+    direction /= np.linalg.norm(direction, axis=1, keepdims=True)
+    return quad + direction * radius * 1.4, min(98.0, 96 - error * 20)
+
+
+def _detect_magnet_quad(image: np.ndarray) -> tuple[np.ndarray, float] | None:
+    """Locate the sheet from the four round magnets that hold its corners."""
+    gray = cv2.medianBlur(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 5)
+    longest = max(image.shape[:2])
+    for sensitivity in (24, 18, 14, 12):
+        found = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1, minDist=longest * 0.04, param1=100,
+                                 param2=sensitivity, minRadius=int(longest * 0.01), maxRadius=int(longest * 0.022))
+        if found is None or len(found[0]) < 3:
+            continue
+        result = _magnet_quad_from_circles(found[0], float(image.shape[0] * image.shape[1]))
+        if result is not None:
+            return result
+    return None
+
+
 def _detect_a4_quad(image: np.ndarray) -> tuple[np.ndarray, float] | None:
     """Find the A4 sheet as the largest bright, colourless region.
 
     Paper is bright and almost unsaturated, unlike a gold board, a coloured
     cloth, or a dark frame. A large opening removes thin bridges to bright
     background, and the region is accepted only if it has an A4 shape.
+    Brightness cutoffs are tried loosest first, because uneven lighting can
+    either dim one side of the sheet or let bright surroundings merge with it.
     Returns the four ordered corners and a confidence, or None.
     """
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    paper = ((hsv[..., 1] < 40) & (hsv[..., 2] > 115)).astype(np.uint8) * 255
-    paper = cv2.morphologyEx(paper, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
-    kernel = int(max(image.shape[:2]) * 0.043) | 1
-    paper = cv2.morphologyEx(paper, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, kernel)))
-    contours, _ = cv2.findContours(paper, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None
-    contour = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(contour)
-    rect = cv2.minAreaRect(contour)
-    rect_w, rect_h = rect[1]
-    if min(rect_w, rect_h) < 100 or area < image.shape[0] * image.shape[1] * 0.25:
-        return None
-    ratio = max(rect_w, rect_h) / min(rect_w, rect_h)
-    fill = area / (rect_w * rect_h)
-    # Clips, shadows and one-sided photo perspective bend the ratio a little.
-    if abs(ratio - A4_RATIO) / A4_RATIO > 0.12 or fill < 0.85:
-        return None
-    confidence = min(97.0, 80 + fill * 12 + (1 - abs(ratio - A4_RATIO) / A4_RATIO) * 5)
-    return _order_points(cv2.boxPoints(rect)), confidence
+    # Relative cutoff: floral cloth and laptops sit near V~125 while white paper
+    # under the same light is V~200+, so a fixed value merges them.
+    paper_level = float(np.percentile(hsv[..., 2], 90))
+    longest = max(image.shape[:2])
+    # Close wide enough to fill the dark corner magnets before opening,
+    # otherwise the opening erodes the sliver of paper beside each magnet.
+    close = int(longest * 0.03) | 1
+    kernel = int(longest * 0.043) | 1
+    for factor in (0.7, 0.75, 0.8):
+        cutoff = max(130.0, factor * paper_level)
+        paper = ((hsv[..., 1] < 45) & (hsv[..., 2] > cutoff)).astype(np.uint8) * 255
+        paper = cv2.morphologyEx(paper, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (close, close)))
+        paper = cv2.morphologyEx(paper, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (kernel, kernel)))
+        contours, _ = cv2.findContours(paper, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            continue
+        contour = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(contour)
+        rect_w, rect_h = cv2.minAreaRect(contour)[1]
+        if min(rect_w, rect_h) < 100 or area < image.shape[0] * image.shape[1] * 0.25:
+            continue
+        ratio = max(rect_w, rect_h) / min(rect_w, rect_h)
+        fill = area / (rect_w * rect_h)
+        # Clips, shadows and one-sided photo perspective bend the ratio a little.
+        if abs(ratio - A4_RATIO) / A4_RATIO > 0.12 or fill < 0.78:
+            continue
+        confidence = min(97.0, 80 + fill * 12 + (1 - abs(ratio - A4_RATIO) / A4_RATIO) * 5)
+        # The sheet is a trapezoid under camera perspective, so use the hull's
+        # diagonal extremes as corners rather than a rotated rectangle.
+        return _hull_corners(contour), confidence
+    return None
 
 
 def _flatten_sheet(image: np.ndarray, portrait_hint: bool | None = None) -> tuple[np.ndarray, float]:
@@ -107,7 +192,7 @@ def _flatten_sheet(image: np.ndarray, portrait_hint: bool | None = None) -> tupl
 
     # Preferred path: the input is always an A4 sheet, so crop exactly to it and
     # discard the board, cloth, clips and other surroundings.
-    detected = _detect_a4_quad(small)
+    detected = _detect_magnet_quad(small) or _detect_a4_quad(small)
     if detected is not None:
         quad, confidence = detected
         w = int(max(np.linalg.norm(quad[2] - quad[3]), np.linalg.norm(quad[1] - quad[0])))
